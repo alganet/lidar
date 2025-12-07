@@ -37,5 +37,10 @@
             ],
             "run_at": "document_idle"
         }
+    ],
+    "web_accessible_resources": [
+        "panel.html",
+        "panel.css",
+        "icons/sprites.svg"
     ]
 }

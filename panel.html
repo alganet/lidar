@@ -1,0 +1,173 @@
+<!--
+SPDX-FileCopyrightText: 2025 Alexandre Gomes Gaigalas <alganet@gmail.com>
+
+SPDX-License-Identifier: ISC
+-->
+
+<div class="panel" id="lidarPanel">
+    <div class="panel-header" id="panelHeader">
+        <div class="panel-title">
+            <svg width="20" height="20" class="icon">
+                <use href="#icon-logo" />
+            </svg>
+            <span>Lidar</span>
+        </div>
+        <div class="panel-controls">
+            <button class="control-btn" id="backBtn" title="Back" style="display: none;">
+                <svg width="14" height="14">
+                    <use href="#icon-arrow-left" />
+                </svg>
+            </button>
+            <button class="control-btn close" id="closeBtn" title="Close">
+                <svg width="14" height="14">
+                    <use href="#icon-x" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="panel-body">
+        <!-- List View -->
+        <div class="view active" id="listView">
+            <div class="rules-list" id="rulesList"></div>
+            <button class="btn btn-primary btn-full" id="createNewBtn">
+                <svg width="14" height="14">
+                    <use href="#icon-plus" />
+                </svg>
+                Create New Rule
+            </button>
+        </div>
+
+        <!-- Editor View -->
+        <div class="view" id="editorView">
+            <div class="form-group">
+                <label>Rule Name <span class="field-badge">required</span></label>
+                <input type="text" id="ruleName" placeholder="e.g., Person, Product, Article">
+            </div>
+
+            <div class="form-group">
+                <label>URL Pattern <span class="field-badge">required</span></label>
+                <input type="text" id="urlPattern" placeholder="e.g., https://example.com/*">
+                <div class="field-hint">Use * as wildcard. Matches pages where this rule applies.</div>
+            </div>
+
+            <div class="fields-section">
+                <div class="fields-header">Fields</div>
+                <div class="fields-list" id="fieldsList"></div>
+                <button class="btn btn-secondary btn-full" id="addFieldBtn">
+                    <svg width="12" height="12">
+                        <use href="#icon-plus" />
+                    </svg>
+                    Add Field
+                </button>
+            </div>
+
+            <div class="form-actions">
+                <button class="btn btn-ghost" id="cancelBtn">Cancel</button>
+                <button class="btn btn-primary" id="saveBtn">Save Rule</button>
+            </div>
+        </div>
+
+        <!-- Browse View -->
+        <div class="view" id="browseView">
+            <div class="browse-header">
+                <h3 id="browseTitle">Data</h3>
+                <span class="badge" id="browseCount">0 records</span>
+            </div>
+            <div class="data-list" id="dataList"></div>
+            <div class="empty-state" id="emptyState" style="display: none;">
+                <svg width="40" height="40" style="opacity: 0.5;">
+                    <use href="#icon-box" />
+                </svg>
+                <p>No data yet. Apply this rule to a page to start collecting.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar hidden" id="statusBar"></div>
+</div>
+
+<template id="template-rule-card">
+    <div class="rule-card">
+        <div class="rule-info">
+            <div class="rule-name-row">
+                <svg class="check-icon" width="16" height="16" style="display: none;">
+                    <use href="#icon-check" />
+                </svg>
+                <span class="rule-name"></span>
+            </div>
+            <span class="rule-meta"></span>
+        </div>
+        <div class="rule-actions">
+            <button class="btn btn-secondary btn-sm browse-btn" title="Browse collected data">
+                <svg width="12" height="12">
+                    <use href="#icon-browse" />
+                </svg>
+            </button>
+            <button class="btn btn-secondary btn-sm edit-btn" title="Edit rule">
+                <svg width="12" height="12">
+                    <use href="#icon-edit" />
+                </svg>
+            </button>
+            <button class="btn btn-danger btn-sm delete-btn" title="Delete rule">
+                <svg width="12" height="12">
+                    <use href="#icon-trash" />
+                </svg>
+            </button>
+        </div>
+    </div>
+</template>
+
+<template id="template-empty-rules">
+    <div class="empty-state">
+        <svg width="40" height="40" style="opacity: 0.5;">
+            <use href="#icon-box" />
+        </svg>
+        <p>No rules yet. Create your first rule to start scraping.</p>
+    </div>
+</template>
+
+<template id="template-field-item">
+    <div class="field-item">
+        <div class="field-header">
+            <span class="field-name-display" style="display: none;">
+                <span class="field-name">ID</span>
+                <span class="field-badge">required</span>
+            </span>
+            <div class="field-name-edit" style="display: flex; gap: 8px; flex: 1; align-items: center;">
+                <input type="text" class="field-name-input" placeholder="Field name">
+                <button class="btn btn-danger btn-sm remove-field-btn">
+                    <svg width="10" height="10">
+                        <use href="#icon-x" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <div class="field-controls">
+            <input type="text" class="selector-input" placeholder="Click Pick to select" readonly>
+            <button class="btn btn-pick">
+                <svg width="12" height="12">
+                    <use href="#icon-cursor" />
+                </svg>
+                Pick
+            </button>
+        </div>
+    </div>
+</template>
+
+<template id="template-data-card">
+    <div class="data-card">
+        <div class="data-card-header">
+            <span class="data-identifier"></span>
+            <span class="data-date"></span>
+        </div>
+        <div class="data-fields"></div>
+    </div>
+</template>
+
+<template id="template-data-field">
+    <div class="data-field">
+        <span class="data-field-name"></span>
+        <span class="data-field-value"></span>
+    </div>
+</template>
