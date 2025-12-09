@@ -16,6 +16,23 @@
 
     let dbCache = null;
 
+    // INTERNAL: Migration registry
+    const migrations = {};
+
+    /**
+     * Register a migration function for a specific target version.
+     * The migration will be executed when upgrading to that version.
+     *
+     * Migration signature: (database, transaction, context) => void
+     * - database: IDBDatabase instance
+     * - transaction: IDBTransaction for the upgrade
+     * - context: { from, to }
+     */
+    function registerMigration(version, fn) {
+        if (!Number.isInteger(version) || version < 1) throw new Error('version must be integer >= 1');
+        migrations[version] = fn;
+    }
+
     // Initialize IndexedDB
     function initDB(indexedDB) {
         return new Promise((resolve, reject) => {
@@ -34,19 +51,25 @@
 
             request.onupgradeneeded = (event) => {
                 const database = event.target.result;
+                const txn = event.target.transaction;
+                const oldVersion = event.oldVersion || 0;
+                const newVersion = event.newVersion || DB_VERSION;
 
-                // Rules store
-                if (!database.objectStoreNames.contains('rules')) {
-                    const rulesStore = database.createObjectStore('rules', { keyPath: 'id' });
-                    rulesStore.createIndex('name', 'name', { unique: true });
-                }
-
-                // Scraped data store
-                if (!database.objectStoreNames.contains('data')) {
-                    const dataStore = database.createObjectStore('data', { keyPath: 'id' });
-                    dataStore.createIndex('ruleId', 'ruleId', { unique: false });
-                    dataStore.createIndex('identifier', 'identifier', { unique: false });
-                    dataStore.createIndex('ruleId_identifier', ['ruleId', 'identifier'], { unique: true });
+                // Apply migrations incrementally between versions
+                for (let v = oldVersion + 1; v <= newVersion; v++) {
+                    const m = migrations[v];
+                    if (typeof m === 'function') {
+                        try {
+                            m(database, txn, { from: oldVersion, to: newVersion });
+                        } catch (e) {
+                            console.error(`Migration ${v} failed:`, e);
+                            // Re-throw to abort upgrade if something went wrong
+                            throw e;
+                        }
+                    } else {
+                        // No migration registered for this version; continue
+                        console.warn(`No migration registered for version ${v}`);
+                    }
                 }
             };
         });
@@ -231,6 +254,30 @@
         });
     }
 
+    // Register initial migration for version 1 (initial schema)
+    registerMigration(1, (database, txn) => {
+        // Rules store
+        if (!database.objectStoreNames.contains('rules')) {
+            const rulesStore = database.createObjectStore('rules', { keyPath: 'id' });
+            rulesStore.createIndex('name', 'name', { unique: true });
+        }
+
+        // Scraped data store
+        if (!database.objectStoreNames.contains('data')) {
+            const dataStore = database.createObjectStore('data', { keyPath: 'id' });
+            dataStore.createIndex('ruleId', 'ruleId', { unique: false });
+            dataStore.createIndex('identifier', 'identifier', { unique: false });
+            dataStore.createIndex('ruleId_identifier', ['ruleId', 'identifier'], { unique: true });
+        }
+    });
+
+    // Example migration for future versions (uncomment and update DB_VERSION)
+    // registerMigration(2, (database, txn) => {
+    //     // Example: add a new index to 'data' store
+    //     const dataStore = txn.objectStore('data');
+    //     dataStore.createIndex('sourceUrl', 'sourceUrl', { unique: false });
+    // });
+
     // Export database functions
     window.Lidar.db = {
         initDB,
@@ -243,6 +290,7 @@
         saveData,
         getDataByRule,
         deleteData,
-        deleteDataByRule
+        deleteDataByRule,
+        registerMigration
     };
 })();
