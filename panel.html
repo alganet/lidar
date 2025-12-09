@@ -70,9 +70,25 @@ SPDX-License-Identifier: ISC
 
         <!-- Browse View -->
         <div class="view" id="browseView">
-            <div class="browse-header">
-                <h3 id="browseTitle">Data</h3>
-                <span class="badge" id="browseCount">0 records</span>
+            <div class="browse-header" style="flex-wrap: wrap; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <h3 id="browseTitle">Data</h3>
+                    <span class="badge" id="browseCount">0 records</span>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button class="btn btn-secondary btn-sm" id="exportBtn" title="Export as JSON">
+                        <svg width="12" height="12">
+                            <use href="#icon-download" />
+                        </svg>
+                        Export
+                    </button>
+                    <button class="btn btn-danger btn-sm" id="clearDataBtn" title="Clear all data">
+                        <svg width="12" height="12">
+                            <use href="#icon-trash" />
+                        </svg>
+                        Clear
+                    </button>
+                </div>
             </div>
             <div class="data-list" id="dataList"></div>
             <div class="empty-state" id="emptyState" style="display: none;">

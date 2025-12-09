@@ -44,7 +44,7 @@
                 const el = document.querySelector(field.selector);
                 if (el) {
                     if (el.tagName === 'A') {
-                        data[field.name] = el.href || el.textContent?.trim();
+                        data[field.name] = el.textContent?.trim();
                     } else if (el.tagName === 'IMG') {
                         data[field.name] = el.src || el.alt;
                     } else if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {

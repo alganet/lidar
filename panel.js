@@ -21,6 +21,8 @@
   let currentView = 'list';
   let editingRuleId = null;
   let highlightOverlay = null;
+  let currentBrowseRule = null;
+  let currentBrowseData = [];
 
   // Create the panel container
   const panelHost = document.createElement('div');
@@ -85,6 +87,8 @@
   const dataList = shadow.getElementById('dataList');
   const emptyState = shadow.getElementById('emptyState');
   const statusBar = shadow.getElementById('statusBar');
+  const exportBtn = shadow.getElementById('exportBtn');
+  const clearDataBtn = shadow.getElementById('clearDataBtn');
 
   // Templates
   const templateRuleCard = shadow.getElementById('template-rule-card');
@@ -225,7 +229,7 @@
         try {
           const el = document.querySelector(field.selector);
           if (el) {
-            if (el.tagName === 'A') data[field.name] = el.href || el.textContent?.trim();
+            if (el.tagName === 'A') data[field.name] = el.textContent?.trim();
             else if (el.tagName === 'IMG') data[field.name] = el.src || el.alt;
             else if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') data[field.name] = el.value;
             else data[field.name] = el.textContent?.trim();
@@ -407,22 +411,36 @@
 
   // Browse
   async function showBrowse(rule) {
+    currentBrowseRule = rule;
     browseTitle.textContent = rule.name;
 
     try {
       const data = await sendMessage({ action: 'getDataByRule', ruleId: rule.id });
       if (data.error) throw new Error(data.error);
 
+      // Sort by date descending
+      data.sort((a, b) => (b.scrapedAt || '').localeCompare(a.scrapedAt || ''));
+      currentBrowseData = data;
+
       browseCount.textContent = `${data.length} record${data.length !== 1 ? 's' : ''}`;
 
       if (data.length === 0) {
         dataList.style.display = 'none';
         emptyState.style.display = 'flex';
+        exportBtn.disabled = true;
+        clearDataBtn.disabled = true;
       } else {
         dataList.style.display = 'flex';
         emptyState.style.display = 'none';
+        exportBtn.disabled = false;
+        clearDataBtn.disabled = false;
+
         dataList.innerHTML = '';
-        data.forEach(record => {
+
+        // Show only last 50
+        const displayData = data.slice(0, 50);
+
+        displayData.forEach(record => {
           const cardClone = templateDataCard.content.cloneNode(true);
           cardClone.querySelector('.data-identifier').textContent = record.identifier || 'Unknown';
           cardClone.querySelector('.data-date').textContent = formatDate(record.scrapedAt);
@@ -437,6 +455,16 @@
 
           dataList.appendChild(cardClone);
         });
+
+        if (data.length > 50) {
+          const moreInfo = document.createElement('div');
+          moreInfo.style.textAlign = 'center';
+          moreInfo.style.padding = '10px';
+          moreInfo.style.color = '#606080';
+          moreInfo.style.fontSize = '11px';
+          moreInfo.textContent = `Showing recent 50 of ${data.length} records. Export to see all.`;
+          dataList.appendChild(moreInfo);
+        }
       }
     } catch (error) {
       showStatus(`Error: ${error.message}`, 'error');
@@ -444,6 +472,33 @@
 
     showView('browse');
   }
+
+  exportBtn.addEventListener('click', () => {
+    if (!currentBrowseData || currentBrowseData.length === 0) return;
+
+    const blob = new Blob([JSON.stringify(currentBrowseData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentBrowseRule.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_data.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  clearDataBtn.addEventListener('click', async () => {
+    if (!currentBrowseRule) return;
+    if (!confirm('Are you sure you want to clear all data for this rule?\nThis implies starting the list anew.')) return;
+
+    try {
+      await sendMessage({ action: 'deleteDataByRule', ruleId: currentBrowseRule.id });
+      showStatus('Data cleared successfully', 'success');
+      showBrowse(currentBrowseRule);
+    } catch (error) {
+      showStatus(`Error clearing data: ${error.message}`, 'error');
+    }
+  });
 
   // Delete rule
   async function deleteRule(id) {

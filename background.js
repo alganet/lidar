@@ -180,6 +180,44 @@ async function deleteData(id) {
     });
 }
 
+async function deleteDataByRule(ruleId) {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = database.transaction(['data'], 'readwrite');
+        const store = transaction.objectStore('data');
+        const index = store.index('ruleId');
+
+        // We need to delete by primary key, so first get all keys for the rule
+        const keyRequest = index.getAllKeys(ruleId);
+
+        keyRequest.onsuccess = () => {
+            const keys = keyRequest.result;
+            if (keys.length === 0) {
+                resolve(true);
+                return;
+            }
+
+            let deleteCount = 0;
+            let errorOccurred = false;
+
+            keys.forEach(key => {
+                const deleteRequest = store.delete(key);
+                deleteRequest.onsuccess = () => {
+                    deleteCount++;
+                    if (deleteCount === keys.length) resolve(true);
+                };
+                deleteRequest.onerror = (e) => {
+                    if (!errorOccurred) {
+                        errorOccurred = true;
+                        reject(e.target.error);
+                    }
+                };
+            });
+        };
+        keyRequest.onerror = () => reject(keyRequest.error);
+    });
+}
+
 // Message Handler
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const handleAsync = async () => {
@@ -213,6 +251,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
                 case 'deleteData':
                     return await deleteData(message.id);
+
+                case 'deleteDataByRule':
+                    return await deleteDataByRule(message.ruleId);
 
                 case 'updateBadge':
                     // Update badge with count for the sender tab
