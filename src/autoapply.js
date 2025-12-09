@@ -17,85 +17,6 @@
     // Debounce delay (ms) - wait for DOM to settle
     const DEBOUNCE_DELAY = 1000;
 
-    // Send message to background
-    function sendMessage(message) {
-        return new Promise((resolve, reject) => {
-            chrome.runtime.sendMessage(message, response => {
-                if (chrome.runtime.lastError) {
-                    reject(new Error(chrome.runtime.lastError.message));
-                } else {
-                    resolve(response);
-                }
-            });
-        });
-    }
-
-    // Extract data from page using rule's selectors
-    function extractData(rule) {
-        const data = {};
-
-        for (const field of rule.fields) {
-            if (!field.selector) {
-                data[field.name] = null;
-                continue;
-            }
-
-            try {
-                const el = document.querySelector(field.selector);
-                if (el) {
-                    if (el.tagName === 'A') {
-                        data[field.name] = el.textContent?.trim();
-                    } else if (el.tagName === 'IMG') {
-                        data[field.name] = el.src || el.alt;
-                    } else if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-                        data[field.name] = el.value;
-                    } else {
-                        data[field.name] = el.textContent?.trim();
-                    }
-                } else {
-                    data[field.name] = null;
-                }
-            } catch (e) {
-                data[field.name] = null;
-            }
-        }
-
-        return data;
-    }
-
-    // Check if a rule is applicable (URL pattern and identifier selector matches)
-    function isRuleApplicable(rule) {
-        // Check URL pattern first
-        if (!matchesUrlPattern(rule.urlPattern, window.location.href)) {
-            return false;
-        }
-
-        const identifierField = rule.fields?.find(f => f.name === 'identifier');
-        if (!identifierField?.selector) return false;
-
-        try {
-            const el = document.querySelector(identifierField.selector);
-            return !!el;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    // Helper: Match URL against glob pattern
-    function matchesUrlPattern(pattern, url) {
-        if (!pattern) return true; // No pattern = match all (backwards compat)
-        try {
-            // Convert glob pattern to regex
-            const escaped = pattern
-                .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-                .replace(/\*/g, '.*');
-            const regex = new RegExp(`^${escaped}$`, 'i');
-            return regex.test(url);
-        } catch (e) {
-            return false;
-        }
-    }
-
     // Generate a unique key for this page + rule + identifier value
     function getApplyKey(rule, identifier) {
         return `${rule.id}:${identifier}`;
@@ -107,7 +28,7 @@
         isProcessing = true;
 
         try {
-            const rules = await sendMessage({ action: 'getRules' });
+            const rules = await Lidar.utils.sendMessage({ action: 'getRules' }, chrome.runtime);
             if (rules.error || !Array.isArray(rules)) {
                 isProcessing = false;
                 return;
@@ -116,9 +37,9 @@
             let appliedCount = 0;
 
             for (const rule of rules) {
-                if (!isRuleApplicable(rule)) continue;
+                if (!Lidar.utils.isRuleApplicable(rule, window.location.href, document)) continue;
 
-                const data = extractData(rule);
+                const data = Lidar.utils.extractData(rule, document);
 
                 // Skip if no identifier found
                 if (!data.identifier) continue;
@@ -129,13 +50,13 @@
 
                 // Save the data
                 try {
-                    await sendMessage({
+                    await Lidar.utils.sendMessage({
                         action: 'saveData',
                         ruleId: rule.id,
                         ruleName: rule.name,
                         data,
                         sourceUrl: window.location.href
-                    });
+                    }, chrome.runtime);
 
                     lastAppliedIds.add(applyKey);
                     appliedCount++;
@@ -146,10 +67,10 @@
 
             // Update badge if we applied any rules
             if (appliedCount > 0) {
-                await sendMessage({
+                await Lidar.utils.sendMessage({
                     action: 'updateBadge',
                     count: appliedCount
-                });
+                }, chrome.runtime);
             }
 
         } catch (error) {
@@ -229,7 +150,7 @@
 
     // Clear badge when navigating away
     window.addEventListener('beforeunload', () => {
-        sendMessage({ action: 'clearBadge' }).catch(() => { });
+        Lidar.utils.sendMessage({ action: 'clearBadge' }, chrome.runtime).catch(() => { });
     });
 
 })();

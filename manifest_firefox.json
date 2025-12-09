@@ -23,7 +23,9 @@
     ],
     "background": {
         "scripts": [
-            "background.js"
+            "src/db.js",
+            "src/badge.js",
+            "src/background.js"
         ],
         "persistent": false
     },
@@ -33,14 +35,15 @@
                 "<all_urls>"
             ],
             "js": [
-                "autoapply.js"
+                "src/utils.js",
+                "src/autoapply.js"
             ],
             "run_at": "document_idle"
         }
     ],
     "web_accessible_resources": [
-        "panel.html",
-        "panel.css",
+        "src/panel.html",
+        "src/panel.css",
         "icons/sprites.svg"
     ],
     "browser_specific_settings": {

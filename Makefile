@@ -4,7 +4,7 @@
 
 .PHONY: all chrome firefox clean
 
-FILES := background.js panel.html panel.js panel.css autoapply.js icons LICENSE
+FILES := src icons LICENSE
 
 all: chrome firefox
 

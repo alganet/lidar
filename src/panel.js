@@ -31,8 +31,8 @@
 
   // Load resources
   try {
-    const cssUrl = chrome.runtime.getURL('panel.css');
-    const htmlUrl = chrome.runtime.getURL('panel.html');
+    const cssUrl = chrome.runtime.getURL('src/panel.css');
+    const htmlUrl = chrome.runtime.getURL('src/panel.html');
 
     // Inject CSS
     const link = document.createElement('link');
@@ -129,25 +129,7 @@
     stopPicker();
   });
 
-
-
   backBtn.addEventListener('click', () => showView('list'));
-
-  // Helper: Match URL against glob pattern
-  function matchesUrlPattern(pattern, url) {
-    if (!pattern) return true; // No pattern = match all (backwards compat)
-    try {
-      // Convert glob pattern to regex
-      // Escape special regex chars except *
-      const escaped = pattern
-        .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-        .replace(/\*/g, '.*');
-      const regex = new RegExp(`^${escaped}$`, 'i');
-      return regex.test(url);
-    } catch (e) {
-      return false;
-    }
-  }
 
   // View management
   function showView(view) {
@@ -167,7 +149,7 @@
   // Load rules and auto-apply applicable ones
   async function loadRules() {
     try {
-      const rules = await sendMessage({ action: 'getRules' });
+      const rules = await Lidar.utils.sendMessage({ action: 'getRules' }, chrome.runtime);
       if (rules.error) throw new Error(rules.error);
 
       // Check applicability and auto-apply
@@ -177,7 +159,7 @@
         let applied = false;
 
         // Check URL pattern first
-        if (!matchesUrlPattern(rule.urlPattern, window.location.href)) {
+        if (!Lidar.utils.matchesUrlPattern(rule.urlPattern, window.location.href)) {
           return { ...rule, isApplicable: false, applied: false };
         }
 
@@ -220,38 +202,19 @@
   // Apply rule silently (no status updates, returns result)
   async function applyRuleSilent(rule) {
     try {
-      const data = {};
-      for (const field of rule.fields) {
-        if (!field.selector) {
-          data[field.name] = null;
-          continue;
-        }
-        try {
-          const el = document.querySelector(field.selector);
-          if (el) {
-            if (el.tagName === 'A') data[field.name] = el.textContent?.trim();
-            else if (el.tagName === 'IMG') data[field.name] = el.src || el.alt;
-            else if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') data[field.name] = el.value;
-            else data[field.name] = el.textContent?.trim();
-          } else {
-            data[field.name] = null;
-          }
-        } catch (e) {
-          data[field.name] = null;
-        }
-      }
+      const data = Lidar.utils.extractData(rule, document);
 
       if (!data.identifier) {
         return { success: false, error: 'No identifier' };
       }
 
-      await sendMessage({
+      await Lidar.utils.sendMessage({
         action: 'saveData',
         ruleId: rule.id,
         ruleName: rule.name,
         data,
         sourceUrl: window.location.href
-      });
+      }, chrome.runtime);
 
       return { success: true, data };
     } catch (error) {
@@ -285,13 +248,13 @@
       // Setup actions
       clone.querySelector('.browse-btn').dataset.id = rule.id;
       clone.querySelector('.browse-btn').addEventListener('click', async () => {
-        const r = await sendMessage({ action: 'getRule', id: rule.id });
+        const r = await Lidar.utils.sendMessage({ action: 'getRule', id: rule.id }, chrome.runtime);
         if (!r.error) showBrowse(r);
       });
 
       clone.querySelector('.edit-btn').dataset.id = rule.id;
       clone.querySelector('.edit-btn').addEventListener('click', async () => {
-        const r = await sendMessage({ action: 'getRule', id: rule.id });
+        const r = await Lidar.utils.sendMessage({ action: 'getRule', id: rule.id }, chrome.runtime);
         if (!r.error) showEditor(r);
       });
 
@@ -397,10 +360,10 @@
     try {
       const rule = { id: editingRuleId, name, urlPattern: urlPatternValue, fields };
       if (editingRuleId) {
-        await sendMessage({ action: 'updateRule', rule });
+        await Lidar.utils.sendMessage({ action: 'updateRule', rule }, chrome.runtime);
         showStatus('Rule updated!', 'success');
       } else {
-        await sendMessage({ action: 'createRule', rule });
+        await Lidar.utils.sendMessage({ action: 'createRule', rule }, chrome.runtime);
         showStatus('Rule created!', 'success');
       }
       setTimeout(() => showView('list'), 500);
@@ -415,7 +378,7 @@
     browseTitle.textContent = rule.name;
 
     try {
-      const data = await sendMessage({ action: 'getDataByRule', ruleId: rule.id });
+      const data = await Lidar.utils.sendMessage({ action: 'getDataByRule', ruleId: rule.id }, chrome.runtime);
       if (data.error) throw new Error(data.error);
 
       // Sort by date descending
@@ -492,7 +455,7 @@
     if (!confirm('Are you sure you want to clear all data for this rule?\nThis implies starting the list anew.')) return;
 
     try {
-      await sendMessage({ action: 'deleteDataByRule', ruleId: currentBrowseRule.id });
+      await Lidar.utils.sendMessage({ action: 'deleteDataByRule', ruleId: currentBrowseRule.id }, chrome.runtime);
       showStatus('Data cleared successfully', 'success');
       showBrowse(currentBrowseRule);
     } catch (error) {
@@ -504,7 +467,7 @@
   async function deleteRule(id) {
     if (!confirm('Delete this rule?')) return;
     try {
-      await sendMessage({ action: 'deleteRule', id });
+      await Lidar.utils.sendMessage({ action: 'deleteRule', id }, chrome.runtime);
       showStatus('Rule deleted', 'success');
       loadRules();
     } catch (error) {
@@ -665,18 +628,6 @@
   }
 
   // Utilities
-  function sendMessage(message) {
-    return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage(message, response => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve(response);
-        }
-      });
-    });
-  }
-
   function showStatus(message, type = '') {
     statusBar.textContent = message;
     statusBar.className = `status-bar ${type}`;
