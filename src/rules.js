@@ -20,7 +20,7 @@
                 .replace(/\*/g, '.*');
             const regex = new RegExp(`^${escaped}$`, 'i');
             return regex.test(url);
-        } catch (e) {
+        } catch {
             return false;
         }
     }
