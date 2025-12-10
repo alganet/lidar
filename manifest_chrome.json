@@ -28,7 +28,9 @@
                 "<all_urls>"
             ],
             "js": [
-                "src/utils.js",
+                "src/messaging.js",
+                "src/rules.js",
+                "src/scraping.js",
                 "src/autoapply.js"
             ],
             "run_at": "document_idle"

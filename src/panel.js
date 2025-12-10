@@ -149,7 +149,7 @@
   // Load rules and auto-apply applicable ones
   async function loadRules() {
     try {
-      const rules = await Lidar.utils.sendMessage({ action: 'getRules' }, chrome.runtime);
+      const rules = await Lidar.messaging.sendMessage({ action: 'getRules' }, chrome.runtime);
       if (rules.error) throw new Error(rules.error);
 
       // Check applicability and auto-apply
@@ -159,7 +159,7 @@
         let applied = false;
 
         // Check URL pattern first
-        if (!Lidar.utils.matchesUrlPattern(rule.urlPattern, window.location.href)) {
+        if (!Lidar.rules.matchesUrlPattern(rule.urlPattern, window.location.href)) {
           return { ...rule, isApplicable: false, applied: false };
         }
 
@@ -182,18 +182,15 @@
       }));
 
       // Sort: applicable first, then by name
-      rulesWithStatus.sort((a, b) => {
-        if (a.isApplicable !== b.isApplicable) return b.isApplicable - a.isApplicable;
-        return a.name.localeCompare(b.name);
-      });
+      const sortedRules = Lidar.rules.sortRules(rulesWithStatus);
 
       // Count applied rules
-      const appliedCount = rulesWithStatus.filter(r => r.applied).length;
+      const appliedCount = sortedRules.filter(r => r.applied).length;
       if (appliedCount > 0) {
         showStatus(`${appliedCount} rule${appliedCount !== 1 ? 's' : ''} applied`, 'success');
       }
 
-      renderRulesList(rulesWithStatus);
+      renderRulesList(sortedRules);
     } catch (error) {
       showStatus(`Error: ${error.message}`, 'error');
     }
@@ -202,13 +199,13 @@
   // Apply rule silently (no status updates, returns result)
   async function applyRuleSilent(rule) {
     try {
-      const data = Lidar.utils.extractData(rule, document);
+      const data = Lidar.scraping.extractData(rule, document);
 
       if (!data.identifier) {
         return { success: false, error: 'No identifier' };
       }
 
-      await Lidar.utils.sendMessage({
+      await Lidar.messaging.sendMessage({
         action: 'saveData',
         ruleId: rule.id,
         ruleName: rule.name,
@@ -248,13 +245,13 @@
       // Setup actions
       clone.querySelector('.browse-btn').dataset.id = rule.id;
       clone.querySelector('.browse-btn').addEventListener('click', async () => {
-        const r = await Lidar.utils.sendMessage({ action: 'getRule', id: rule.id }, chrome.runtime);
+        const r = await Lidar.messaging.sendMessage({ action: 'getRule', id: rule.id }, chrome.runtime);
         if (!r.error) showBrowse(r);
       });
 
       clone.querySelector('.edit-btn').dataset.id = rule.id;
       clone.querySelector('.edit-btn').addEventListener('click', async () => {
-        const r = await Lidar.utils.sendMessage({ action: 'getRule', id: rule.id }, chrome.runtime);
+        const r = await Lidar.messaging.sendMessage({ action: 'getRule', id: rule.id }, chrome.runtime);
         if (!r.error) showEditor(r);
       });
 
@@ -360,10 +357,10 @@
     try {
       const rule = { id: editingRuleId, name, urlPattern: urlPatternValue, fields };
       if (editingRuleId) {
-        await Lidar.utils.sendMessage({ action: 'updateRule', rule }, chrome.runtime);
+        await Lidar.messaging.sendMessage({ action: 'updateRule', rule }, chrome.runtime);
         showStatus('Rule updated!', 'success');
       } else {
-        await Lidar.utils.sendMessage({ action: 'createRule', rule }, chrome.runtime);
+        await Lidar.messaging.sendMessage({ action: 'createRule', rule }, chrome.runtime);
         showStatus('Rule created!', 'success');
       }
       setTimeout(() => showView('list'), 500);
@@ -378,16 +375,16 @@
     browseTitle.textContent = rule.name;
 
     try {
-      const data = await Lidar.utils.sendMessage({ action: 'getDataByRule', ruleId: rule.id }, chrome.runtime);
+      const data = await Lidar.messaging.sendMessage({ action: 'getDataByRule', ruleId: rule.id }, chrome.runtime);
       if (data.error) throw new Error(data.error);
 
       // Sort by date descending
-      data.sort((a, b) => (b.scrapedAt || '').localeCompare(a.scrapedAt || ''));
-      currentBrowseData = data;
+      const sortedData = Lidar.rules.sortData(data);
+      currentBrowseData = sortedData;
 
-      browseCount.textContent = `${data.length} record${data.length !== 1 ? 's' : ''}`;
+      browseCount.textContent = `${sortedData.length} record${sortedData.length !== 1 ? 's' : ''}`;
 
-      if (data.length === 0) {
+      if (sortedData.length === 0) {
         dataList.style.display = 'none';
         emptyState.style.display = 'flex';
         exportBtn.disabled = true;
@@ -401,7 +398,7 @@
         dataList.innerHTML = '';
 
         // Show only last 50
-        const displayData = data.slice(0, 50);
+        const displayData = sortedData.slice(0, 50);
 
         displayData.forEach(record => {
           const cardClone = templateDataCard.content.cloneNode(true);
@@ -419,13 +416,13 @@
           dataList.appendChild(cardClone);
         });
 
-        if (data.length > 50) {
+        if (sortedData.length > 50) {
           const moreInfo = document.createElement('div');
           moreInfo.style.textAlign = 'center';
           moreInfo.style.padding = '10px';
           moreInfo.style.color = '#606080';
           moreInfo.style.fontSize = '11px';
-          moreInfo.textContent = `Showing recent 50 of ${data.length} records. Export to see all.`;
+          moreInfo.textContent = `Showing recent 50 of ${sortedData.length} records. Export to see all.`;
           dataList.appendChild(moreInfo);
         }
       }
@@ -455,7 +452,7 @@
     if (!confirm('Are you sure you want to clear all data for this rule?\nThis implies starting the list anew.')) return;
 
     try {
-      await Lidar.utils.sendMessage({ action: 'deleteDataByRule', ruleId: currentBrowseRule.id }, chrome.runtime);
+      await Lidar.messaging.sendMessage({ action: 'deleteDataByRule', ruleId: currentBrowseRule.id }, chrome.runtime);
       showStatus('Data cleared successfully', 'success');
       showBrowse(currentBrowseRule);
     } catch (error) {
@@ -467,7 +464,7 @@
   async function deleteRule(id) {
     if (!confirm('Delete this rule?')) return;
     try {
-      await Lidar.utils.sendMessage({ action: 'deleteRule', id }, chrome.runtime);
+      await Lidar.messaging.sendMessage({ action: 'deleteRule', id }, chrome.runtime);
       showStatus('Rule deleted', 'success');
       loadRules();
     } catch (error) {
@@ -492,40 +489,6 @@
       display: none;
     `;
     document.body.appendChild(highlightOverlay);
-  }
-
-  function generateSelector(element) {
-    if (element.id && !element.id.startsWith('lidar')) {
-      return `#${CSS.escape(element.id)}`;
-    }
-
-    const path = [];
-    let current = element;
-
-    while (current && current !== document.body) {
-      let selector = current.tagName.toLowerCase();
-
-      if (current.className && typeof current.className === 'string') {
-        const classes = current.className.trim().split(/\s+/).filter(c => c && !c.startsWith('lidar'));
-        if (classes.length > 0) {
-          selector += '.' + classes.slice(0, 2).map(c => CSS.escape(c)).join('.');
-        }
-      }
-
-      const parent = current.parentElement;
-      if (parent) {
-        const siblings = Array.from(parent.children).filter(el => el.tagName === current.tagName);
-        if (siblings.length > 1) {
-          const index = siblings.indexOf(current) + 1;
-          selector += `:nth-of-type(${index})`;
-        }
-      }
-
-      path.unshift(selector);
-      current = current.parentElement;
-    }
-
-    return path.join(' > ');
   }
 
   let pickerTarget = null;
@@ -554,7 +517,7 @@
     e.stopPropagation();
 
     if (pickerTarget) {
-      const selector = generateSelector(pickerTarget);
+      const selector = Lidar.scraping.generateSelector(pickerTarget);
       const preview = pickerTarget.textContent?.trim().substring(0, 50) || '';
 
       // Update the field

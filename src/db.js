@@ -5,11 +5,11 @@
 // Lidar Database Module
 // IndexedDB operations for rules and scraped data
 
-(function() {
+(function () {
     'use strict';
 
     // Initialize Lidar namespace
-    window.Lidar = window.Lidar || {};
+    self.Lidar = self.Lidar || {};
 
     const DB_NAME = 'lidar-db';
     const DB_VERSION = 1;
@@ -279,7 +279,7 @@
     // });
 
     // Export database functions
-    window.Lidar.db = {
+    self.Lidar.db = {
         initDB,
         generateId,
         createRule,

@@ -100,10 +100,10 @@ browserAction.onClicked.addListener(async (tab) => {
     try {
         // Use chrome.scripting (MV3) or chrome.tabs.executeScript (MV2/Firefox)
         if (chrome.scripting && chrome.scripting.executeScript) {
-            // MV3: Need to inject utils.js first, then panel.js
+            // MV3: Need to inject utils first, then panel.js
             await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
-                files: ['src/utils.js']
+                files: ['src/messaging.js', 'src/rules.js', 'src/scraping.js']
             });
             await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
@@ -111,24 +111,19 @@ browserAction.onClicked.addListener(async (tab) => {
             });
         } else {
             // Fallback for Firefox/MV2
-            await new Promise((resolve, reject) => {
-                chrome.tabs.executeScript(tab.id, { file: 'src/utils.js' }, () => {
-                    if (chrome.runtime.lastError) {
-                        reject(new Error(chrome.runtime.lastError.message));
-                    } else {
-                        resolve();
-                    }
+            // Inject dependencies sequentially
+            const files = ['src/messaging.js', 'src/rules.js', 'src/scraping.js', 'src/panel.js'];
+            for (const file of files) {
+                await new Promise((resolve, reject) => {
+                    chrome.tabs.executeScript(tab.id, { file }, () => {
+                        if (chrome.runtime.lastError) {
+                            reject(new Error(chrome.runtime.lastError.message));
+                        } else {
+                            resolve();
+                        }
+                    });
                 });
-            });
-            await new Promise((resolve, reject) => {
-                chrome.tabs.executeScript(tab.id, { file: 'src/panel.js' }, () => {
-                    if (chrome.runtime.lastError) {
-                        reject(new Error(chrome.runtime.lastError.message));
-                    } else {
-                        resolve();
-                    }
-                });
-            });
+            }
         }
     } catch (error) {
         console.error('Error injecting panel:', error);

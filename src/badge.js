@@ -5,11 +5,11 @@
 // Lidar Badge Module
 // Browser extension badge management
 
-(function() {
+(function () {
     'use strict';
 
     // Initialize Lidar namespace
-    window.Lidar = window.Lidar || {};
+    self.Lidar = self.Lidar || {};
 
     // Update badge with count
     function updateBadge(count, tabId, chromeApi) {
@@ -29,7 +29,7 @@
     // Clear badge
     function clearBadge(tabId, chromeApi) {
         const badgeApi = chromeApi.action || chromeApi.browserAction;
-        
+
         if (badgeApi.setBadgeText.length > 1 || chromeApi.action) {
             badgeApi.setBadgeText({ text: '', tabId: tabId });
         } else {
@@ -38,7 +38,7 @@
     }
 
     // Export badge functions
-    window.Lidar.badge = {
+    self.Lidar.badge = {
         updateBadge,
         clearBadge
     };

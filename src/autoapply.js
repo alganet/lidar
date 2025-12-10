@@ -17,18 +17,13 @@
     // Debounce delay (ms) - wait for DOM to settle
     const DEBOUNCE_DELAY = 1000;
 
-    // Generate a unique key for this page + rule + identifier value
-    function getApplyKey(rule, identifier) {
-        return `${rule.id}:${identifier}`;
-    }
-
     // Auto-apply all matching rules
     async function autoApplyRules() {
         if (isProcessing) return;
         isProcessing = true;
 
         try {
-            const rules = await Lidar.utils.sendMessage({ action: 'getRules' }, chrome.runtime);
+            const rules = await Lidar.messaging.sendMessage({ action: 'getRules' }, chrome.runtime);
             if (rules.error || !Array.isArray(rules)) {
                 isProcessing = false;
                 return;
@@ -37,20 +32,20 @@
             let appliedCount = 0;
 
             for (const rule of rules) {
-                if (!Lidar.utils.isRuleApplicable(rule, window.location.href, document)) continue;
+                if (!Lidar.scraping.isRuleApplicable(rule, window.location.href, document)) continue;
 
-                const data = Lidar.utils.extractData(rule, document);
+                const data = Lidar.scraping.extractData(rule, document);
 
                 // Skip if no identifier found
                 if (!data.identifier) continue;
 
                 // Skip if we've already applied this exact rule+identifier combo
-                const applyKey = getApplyKey(rule, data.identifier);
+                const applyKey = Lidar.rules.getApplyKey(rule, data.identifier);
                 if (lastAppliedIds.has(applyKey)) continue;
 
                 // Save the data
                 try {
-                    await Lidar.utils.sendMessage({
+                    await Lidar.messaging.sendMessage({
                         action: 'saveData',
                         ruleId: rule.id,
                         ruleName: rule.name,
@@ -67,7 +62,7 @@
 
             // Update badge if we applied any rules
             if (appliedCount > 0) {
-                await Lidar.utils.sendMessage({
+                await Lidar.messaging.sendMessage({
                     action: 'updateBadge',
                     count: appliedCount
                 }, chrome.runtime);
@@ -150,7 +145,7 @@
 
     // Clear badge when navigating away
     window.addEventListener('beforeunload', () => {
-        Lidar.utils.sendMessage({ action: 'clearBadge' }, chrome.runtime).catch(() => { });
+        Lidar.messaging.sendMessage({ action: 'clearBadge' }, chrome.runtime).catch(() => { });
     });
 
 })();
