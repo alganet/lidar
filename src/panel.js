@@ -152,70 +152,38 @@
       const rules = await Lidar.messaging.sendMessage({ action: 'getRules' }, chrome.runtime);
       if (rules.error) throw new Error(rules.error);
 
-      // Check applicability and auto-apply
+      // Check applicability only (for UI)
       const rulesWithStatus = await Promise.all(rules.map(async (rule) => {
         const identifierField = rule.fields.find(f => f.name === 'identifier');
         let isApplicable = false;
-        let applied = false;
 
         // Check URL pattern first
         if (!Lidar.rules.matchesUrlPattern(rule.urlPattern, window.location.href)) {
-          return { ...rule, isApplicable: false, applied: false };
+          return { ...rule, isApplicable: false };
         }
 
         if (identifierField?.selector) {
           try {
             const el = document.querySelector(identifierField.selector);
             isApplicable = !!el;
-
-            if (isApplicable) {
-              // Auto-apply this rule
-              const result = await applyRuleSilent(rule);
-              applied = result.success;
-            }
           } catch (e) {
             isApplicable = false;
           }
         }
 
-        return { ...rule, isApplicable, applied };
+        return { ...rule, isApplicable };
       }));
 
       // Sort: applicable first, then by name
       const sortedRules = Lidar.rules.sortRules(rulesWithStatus);
 
-      // Count applied rules
-      const appliedCount = sortedRules.filter(r => r.applied).length;
-      if (appliedCount > 0) {
-        showStatus(`${appliedCount} rule${appliedCount !== 1 ? 's' : ''} applied`, 'success');
-      }
+      // Reset status bar (no longer showing applied count on load)
+      statusBar.textContent = '';
+      statusBar.className = 'status-bar';
 
       renderRulesList(sortedRules);
     } catch (error) {
       showStatus(`Error: ${error.message}`, 'error');
-    }
-  }
-
-  // Apply rule silently (no status updates, returns result)
-  async function applyRuleSilent(rule) {
-    try {
-      const data = Lidar.scraping.extractData(rule, document);
-
-      if (!data.identifier) {
-        return { success: false, error: 'No identifier' };
-      }
-
-      await Lidar.messaging.sendMessage({
-        action: 'saveData',
-        ruleId: rule.id,
-        ruleName: rule.name,
-        data,
-        sourceUrl: window.location.href
-      }, chrome.runtime);
-
-      return { success: true, data };
-    } catch (error) {
-      return { success: false, error: error.message };
     }
   }
 
@@ -234,8 +202,7 @@
       if (rule.isApplicable) card.classList.add('applicable');
       card.dataset.id = rule.id;
 
-      const checkIcon = clone.querySelector('.check-icon');
-      if (rule.applied) checkIcon.style.display = 'block';
+      // Removed checkIcon logic as we don't track applied status here anymore
 
       clone.querySelector('.rule-name').textContent = rule.name;
 

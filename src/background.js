@@ -25,13 +25,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     return await Lidar.db.getRule(message.id, indexedDB);
 
                 case 'createRule':
-                    return await Lidar.db.createRule(message.rule, indexedDB, crypto);
+                    const createResult = await Lidar.db.createRule(message.rule, indexedDB, crypto);
+                    broadcastRulesUpdated();
+                    return createResult;
 
                 case 'updateRule':
-                    return await Lidar.db.updateRule(message.rule, indexedDB);
+                    const updateResult = await Lidar.db.updateRule(message.rule, indexedDB);
+                    broadcastRulesUpdated();
+                    return updateResult;
 
                 case 'deleteRule':
-                    return await Lidar.db.deleteRule(message.id, indexedDB);
+                    const deleteResult = await Lidar.db.deleteRule(message.id, indexedDB);
+                    broadcastRulesUpdated();
+                    return deleteResult;
 
                 case 'saveData':
                     return await Lidar.db.saveData(
@@ -129,3 +135,19 @@ browserAction.onClicked.addListener(async (tab) => {
         console.error('Error injecting panel:', error);
     }
 });
+
+// Helper to broadcast rule updates to all tabs
+function broadcastRulesUpdated() {
+    chrome.tabs.query({}, (tabs) => {
+        tabs.forEach(tab => {
+            try {
+                chrome.tabs.sendMessage(tab.id, { action: 'rulesUpdated' }, () => {
+                    // Ignore errors (e.g. if tab doesn't have content script)
+                    if (chrome.runtime.lastError) { }
+                });
+            } catch (e) {
+                // Ignore errors
+            }
+        });
+    });
+}
