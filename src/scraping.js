@@ -70,7 +70,7 @@
                 } else {
                     data[field.name] = null;
                 }
-            } catch (e) {
+            } catch {
                 data[field.name] = null;
             }
         }
@@ -91,7 +91,7 @@
         try {
             const el = rootElement.querySelector(identifierField.selector);
             return !!el;
-        } catch (e) {
+        } catch {
             return false;
         }
     }

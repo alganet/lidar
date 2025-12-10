@@ -149,7 +149,7 @@
     });
 
     // Listen for rule updates from background (e.g. when panel creates/edits a rule)
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    chrome.runtime.onMessage.addListener((message) => {
         if (message.action === 'rulesUpdated') {
             // Re-run auto-apply
             lastAppliedIds.clear(); // Changes might make previously ignored rules applicable or vice versa

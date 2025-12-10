@@ -18,7 +18,6 @@
   // State
   let isPickerActive = false;
   let currentPickField = null;
-  let currentView = 'list';
   let editingRuleId = null;
   let highlightOverlay = null;
   let currentBrowseRule = null;
@@ -133,7 +132,6 @@
 
   // View management
   function showView(view) {
-    currentView = view;
     listView.classList.toggle('active', view === 'list');
     editorView.classList.toggle('active', view === 'editor');
     browseView.classList.toggle('active', view === 'browse');
@@ -166,7 +164,7 @@
           try {
             const el = document.querySelector(identifierField.selector);
             isApplicable = !!el;
-          } catch (e) {
+          } catch {
             isApplicable = false;
           }
         }

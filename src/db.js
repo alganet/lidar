@@ -255,7 +255,7 @@
     }
 
     // Register initial migration for version 1 (initial schema)
-    registerMigration(1, (database, txn) => {
+    registerMigration(1, (database) => {
         // Rules store
         if (!database.objectStoreNames.contains('rules')) {
             const rulesStore = database.createObjectStore('rules', { keyPath: 'id' });

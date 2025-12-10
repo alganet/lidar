@@ -8,7 +8,7 @@
 // Load dependencies (MV3 service worker)
 try {
     importScripts('db.js', 'badge.js');
-} catch (e) {
+} catch {
     // Firefox MV2 loads scripts via manifest, not importScripts
     console.log('Scripts loaded via manifest');
 }
@@ -24,20 +24,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 case 'getRule':
                     return await Lidar.db.getRule(message.id, indexedDB);
 
-                case 'createRule':
+                case 'createRule': {
                     const createResult = await Lidar.db.createRule(message.rule, indexedDB, crypto);
                     broadcastRulesUpdated();
                     return createResult;
+                }
 
-                case 'updateRule':
+                case 'updateRule': {
                     const updateResult = await Lidar.db.updateRule(message.rule, indexedDB);
                     broadcastRulesUpdated();
                     return updateResult;
+                }
 
-                case 'deleteRule':
+                case 'deleteRule': {
                     const deleteResult = await Lidar.db.deleteRule(message.id, indexedDB);
                     broadcastRulesUpdated();
                     return deleteResult;
+                }
 
                 case 'saveData':
                     return await Lidar.db.saveData(
@@ -143,9 +146,9 @@ function broadcastRulesUpdated() {
             try {
                 chrome.tabs.sendMessage(tab.id, { action: 'rulesUpdated' }, () => {
                     // Ignore errors (e.g. if tab doesn't have content script)
-                    if (chrome.runtime.lastError) { }
+                    void chrome.runtime.lastError;
                 });
-            } catch (e) {
+            } catch {
                 // Ignore errors
             }
         });
