@@ -8,8 +8,20 @@
 (function () {
     'use strict';
 
-    // Initialize Lidar namespace
-    self.Lidar = self.Lidar || {};
+    // Initialize Lidar namespace - compatible with browser and Node.js
+    // In Node.js/jest environment, use global
+    // In browser, use self/window
+    let globalObj;
+    if (typeof global !== 'undefined' && global && typeof global.Lidar !== 'undefined') {
+        globalObj = global;
+    } else if (typeof self !== 'undefined' && self) {
+        globalObj = self;
+    } else if (typeof window !== 'undefined' && window) {
+        globalObj = window;
+    } else {
+        globalObj = this;
+    }
+    globalObj.Lidar = globalObj.Lidar || {};
 
     const DB_NAME = 'lidar-db';
     const DB_VERSION = 1;
@@ -162,29 +174,40 @@
         return new Promise((resolve, reject) => {
             const transaction = database.transaction(['data'], 'readwrite');
             const store = transaction.objectStore('data');
-            const index = store.index('ruleId_identifier');
 
-            // Check for existing record with same ruleId and identifier (upsert)
-            const lookupRequest = index.get([ruleId, scrapedData.identifier]);
+            const record = {
+                id: generateId(crypto),
+                ruleId,
+                ruleName,
+                identifier: scrapedData.identifier,
+                data: scrapedData,
+                sourceUrl,
+                scrapedAt: new Date().toISOString()
+            };
 
-            lookupRequest.onsuccess = () => {
-                const existing = lookupRequest.result;
-                const record = {
-                    id: existing ? existing.id : generateId(crypto),
-                    ruleId,
-                    ruleName,
-                    identifier: scrapedData.identifier,
-                    data: scrapedData,
-                    sourceUrl,
-                    scrapedAt: new Date().toISOString()
+            // If identifier is present, try to upsert based on ruleId + identifier
+            if (scrapedData.identifier !== undefined) {
+                const index = store.index('ruleId_identifier');
+                const lookupRequest = index.get([ruleId, scrapedData.identifier]);
+
+                lookupRequest.onsuccess = () => {
+                    const existing = lookupRequest.result;
+                    if (existing) {
+                        record.id = existing.id; // Use existing ID for update
+                    }
+
+                    const saveRequest = store.put(record);
+                    saveRequest.onsuccess = () => resolve(record);
+                    saveRequest.onerror = () => reject(saveRequest.error);
                 };
 
+                lookupRequest.onerror = () => reject(lookupRequest.error);
+            } else {
+                // No identifier, just upsert new record
                 const saveRequest = store.put(record);
                 saveRequest.onsuccess = () => resolve(record);
                 saveRequest.onerror = () => reject(saveRequest.error);
-            };
-
-            lookupRequest.onerror = () => reject(lookupRequest.error);
+            }
         });
     }
 
@@ -279,7 +302,7 @@
     // });
 
     // Export database functions
-    self.Lidar.db = {
+    globalObj.Lidar.db = {
         initDB,
         generateId,
         createRule,
@@ -291,6 +314,8 @@
         getDataByRule,
         deleteData,
         deleteDataByRule,
-        registerMigration
+        registerMigration,
+        resetCache: () => { dbCache = null; },
+        closeDB: () => { if (dbCache) { dbCache.close(); dbCache = null; } }
     };
 })();

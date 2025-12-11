@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2025 Alexandre Gomes Gaigalas <alganet@gmail.com>
+//
+// SPDX-License-Identifier: ISC
+
 import globals from "globals";
 import pluginJs from "@eslint/js";
 
@@ -9,6 +13,7 @@ export default [
             globals: {
                 ...globals.browser,
                 ...globals.webextensions,
+                global: "readonly",
                 Lidar: "writable",
                 importScripts: "readonly"
             }
