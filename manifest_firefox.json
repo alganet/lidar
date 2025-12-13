@@ -50,7 +50,7 @@
     ],
     "browser_specific_settings": {
         "gecko": {
-            "id": "lidar-ext@alganet.github.io",
+            "id": "lidar-extension@alganet.github.io",
             "strict_min_version": "142.0",
             "data_collection_permissions": {
                 "required": [
