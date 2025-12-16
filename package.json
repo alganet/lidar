@@ -1,6 +1,6 @@
 {
   "name": "lidar",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Create rules to automatically scrape websites as you browse.",
   "scripts": {
     "test": "jest",
