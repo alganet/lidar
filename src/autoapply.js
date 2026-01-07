@@ -32,31 +32,43 @@
             let appliedCount = 0;
 
             for (const rule of rules) {
-                if (!Lidar.scraping.isRuleApplicable(rule, window.location.href, document)) continue;
+                // Handle learning rules separately
+                if (rule.state === 'learning') {
+                    await handleLearningRule(rule);
+                    continue;
+                }
 
-                const data = Lidar.scraping.extractData(rule, document);
+                // Find all matching region roots
+                const regions = rule.regionSelector ? Array.from(document.querySelectorAll(rule.regionSelector)) : [document];
+                if (regions.length === 0) continue;
 
-                // Skip if no identifier found
-                if (!data.identifier) continue;
+                for (const rootElement of regions) {
+                    if (!Lidar.scraping.isRuleApplicable(rule, window.location.href, rootElement)) continue;
 
-                // Skip if we've already applied this exact rule+identifier combo
-                const applyKey = Lidar.rules.getApplyKey(rule, data.identifier);
-                if (lastAppliedIds.has(applyKey)) continue;
+                    const data = Lidar.scraping.extractData(rule, rootElement);
 
-                // Save the data
-                try {
-                    await Lidar.messaging.sendMessage({
-                        action: 'saveData',
-                        ruleId: rule.id,
-                        ruleName: rule.name,
-                        data,
-                        sourceUrl: window.location.href
-                    }, chrome.runtime);
+                    // Skip if no identifier found
+                    if (!data.identifier) continue;
 
-                    lastAppliedIds.add(applyKey);
-                    appliedCount++;
-                } catch (e) {
-                    console.error('Lidar: Error saving data for rule', rule.name, e);
+                    // Skip if we've already applied this exact rule+identifier combo
+                    const applyKey = Lidar.rules.getApplyKey(rule, data.identifier);
+                    if (lastAppliedIds.has(applyKey)) continue;
+
+                    // Save the data
+                    try {
+                        await Lidar.messaging.sendMessage({
+                            action: 'saveData',
+                            ruleId: rule.id,
+                            ruleName: rule.name,
+                            data,
+                            sourceUrl: window.location.href
+                        }, chrome.runtime);
+
+                        lastAppliedIds.add(applyKey);
+                        appliedCount++;
+                    } catch (e) {
+                        console.error('Lidar: Error saving data for rule', rule.name, e);
+                    }
                 }
             }
 
@@ -73,6 +85,58 @@
         }
 
         isProcessing = false;
+    }
+
+    // Handle learning rules: capture snapshots and trigger detection
+    async function handleLearningRule(rule) {
+        // Check if URL pattern matches
+        if (!Lidar.rules.matchesUrlPattern(rule.urlPattern, window.location.href)) {
+            return;
+        }
+
+        // Check if we already have a snapshot from this URL
+        const existingUrls = new Set((rule.snapshots || []).map(s => s.sourceUrl));
+        if (existingUrls.has(window.location.href)) {
+            return;
+        }
+
+        // Find the region
+        if (!rule.regionSelector) {
+            console.error('Lidar: Learning rule has no region selector', rule.name);
+            return;
+        }
+
+        try {
+            const region = document.querySelector(rule.regionSelector);
+            if (!region) {
+                console.warn('Lidar: Region not found for learning rule', rule.name);
+                return;
+            }
+
+            // Capture the region HTML
+            const regionHtml = region.outerHTML;
+
+            // Send snapshot to background
+            const result = await Lidar.messaging.sendMessage({
+                action: 'addSnapshot',
+                ruleId: rule.id,
+                regionHtml,
+                sourceUrl: window.location.href
+            }, chrome.runtime);
+
+            if (result.error) {
+                console.error('Lidar: Error adding snapshot', result.error);
+                return;
+            }
+
+            const updatedRule = result.rule || result;
+            const snapshotCount = updatedRule.snapshots?.length || 0;
+
+            console.log(`Lidar: Captured snapshot ${snapshotCount} for rule "${rule.name}"`);
+
+        } catch (error) {
+            console.error('Lidar: Error capturing snapshot for learning rule', rule.name, error);
+        }
     }
 
     // Debounced handler for DOM changes

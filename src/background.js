@@ -7,10 +7,10 @@
 
 // Load dependencies (MV3 service worker)
 try {
-    importScripts('db.js', 'badge.js');
-} catch {
-    // Firefox MV2 loads scripts via manifest, not importScripts
-    console.log('Scripts loaded via manifest');
+    // Load the centralized global helper first so other scripts can use Lidar._getGlobal()
+    importScripts('global.js', 'rules.js', 'scraping.js', 'fieldDetection.js', 'db.js', 'badge.js');
+} catch (e) {
+    console.error('Lidar: Failed to load background scripts:', e);
 }
 
 // Message Handler
@@ -73,6 +73,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     }
                     return { success: true };
 
+                case 'addSnapshot': {
+                    const snapshotResult = await Lidar.db.addSnapshot(
+                        message.ruleId,
+                        message.regionHtml,
+                        message.sourceUrl,
+                        indexedDB
+                    );
+                    broadcastRulesUpdated();
+                    return { rule: snapshotResult };
+                }
+
+
+                case 'resolveRule': {
+                    const resolveResult = await Lidar.db.resolveRule(
+                        message.ruleId,
+                        message.fields,
+                        message.identifier,
+                        message.urlPattern,
+                        indexedDB
+                    );
+                    broadcastRulesUpdated();
+                    return { rule: resolveResult };
+                }
+
+                case 'rulesUpdated':
+                    broadcastRulesUpdated();
+                    return { success: true };
+
                 default:
                     throw new Error(`Unknown action: ${message.action}`);
             }
@@ -112,7 +140,7 @@ browserAction.onClicked.addListener(async (tab) => {
             // MV3: Need to inject utils first, then panel.js
             await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
-                files: ['src/messaging.js', 'src/rules.js', 'src/scraping.js']
+                files: ['src/global.js', 'src/messaging.js', 'src/rules.js', 'src/scraping.js', 'src/fieldDetection.js']
             });
             await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
@@ -121,7 +149,7 @@ browserAction.onClicked.addListener(async (tab) => {
         } else {
             // Fallback for Firefox/MV2
             // Inject dependencies sequentially
-            const files = ['src/messaging.js', 'src/rules.js', 'src/scraping.js', 'src/panel.js'];
+            const files = ['src/global.js', 'src/messaging.js', 'src/rules.js', 'src/scraping.js', 'src/fieldDetection.js', 'src/panel.js'];
             for (const file of files) {
                 await new Promise((resolve, reject) => {
                     chrome.tabs.executeScript(tab.id, { file }, () => {

@@ -8,23 +8,14 @@
 (function () {
     'use strict';
 
-    // Initialize Lidar namespace - compatible with browser and Node.js
-    // In Node.js/jest environment, use global
-    // In browser, use self/window
-    let globalObj;
-    if (typeof global !== 'undefined' && global && typeof global.Lidar !== 'undefined') {
-        globalObj = global;
-    } else if (typeof self !== 'undefined' && self) {
-        globalObj = self;
-    } else if (typeof window !== 'undefined' && window) {
-        globalObj = window;
-    } else {
-        globalObj = this;
-    }
-    globalObj.Lidar = globalObj.Lidar || {};
+    const globalObj = (typeof globalThis.__getLidarGlobal === 'function')
+        ? globalThis.__getLidarGlobal()
+        : ((typeof Lidar !== 'undefined' && typeof Lidar._getGlobal === 'function')
+            ? Lidar._getGlobal()
+            : (function () { throw new Error('Global accessor not initialized. Ensure src/global.js is loaded before this module.'); }()));
 
     const DB_NAME = 'lidar-db';
-    const DB_VERSION = 1;
+    const DB_VERSION = 2;
 
     let dbCache = null;
 
@@ -103,6 +94,9 @@
                 id: generateId(crypto),
                 name: rule.name,
                 urlPattern: rule.urlPattern || '',
+                state: rule.state,
+                regionSelector: rule.regionSelector,
+                snapshots: rule.snapshots,
                 fields: rule.fields || [{ name: 'identifier', selector: '', required: true }],
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -185,8 +179,8 @@
                 scrapedAt: new Date().toISOString()
             };
 
-            // If identifier is present, try to upsert based on ruleId + identifier
-            if (scrapedData.identifier !== undefined) {
+            // If identifier is present and valid, try to upsert based on ruleId + identifier
+            if (scrapedData.identifier !== undefined && scrapedData.identifier !== null) {
                 const index = store.index('ruleId_identifier');
                 const lookupRequest = index.get([ruleId, scrapedData.identifier]);
 
@@ -294,12 +288,141 @@
         }
     });
 
-    // Example migration for future versions (uncomment and update DB_VERSION)
-    // registerMigration(2, (database, txn) => {
-    //     // Example: add a new index to 'data' store
-    //     const dataStore = txn.objectStore('data');
-    //     dataStore.createIndex('sourceUrl', 'sourceUrl', { unique: false });
-    // });
+    // Migration v2: Add learning mode support for rules
+    // New fields: state ('learning' | 'resolved'), regionSelector, snapshots
+    // Note: IndexedDB doesn't require schema changes for new fields on existing stores
+    // This migration just documents the schema change - existing rules get 'resolved' state
+    registerMigration(2, () => {
+        // No structural changes needed - new fields are added at runtime
+        // Existing rules will have undefined state, which we treat as 'resolved'
+        console.log('Migration v2: Learning mode support added');
+    });
+
+    /**
+     * Add a snapshot to a learning rule.
+     * @param {string} ruleId
+     * @param {string} regionHtml - Serialized HTML of the region
+     * @param {string} sourceUrl - URL where snapshot was captured
+     * @returns {Promise<object>} Updated rule
+     */
+    async function addSnapshot(ruleId, regionHtml, sourceUrl, indexedDB) {
+        const database = await initDB(indexedDB);
+        return new Promise((resolve, reject) => {
+            const transaction = database.transaction(['rules'], 'readwrite');
+            const store = transaction.objectStore('rules');
+            const getRequest = store.get(ruleId);
+
+            getRequest.onsuccess = () => {
+                const rule = getRequest.result;
+                if (!rule) {
+                    reject(new Error('Rule not found'));
+                    return;
+                }
+
+                if (rule.state !== 'learning') {
+                    reject(new Error('Rule is not in learning state'));
+                    return;
+                }
+
+                // Initialize snapshots array if needed
+                if (!Array.isArray(rule.snapshots)) {
+                    rule.snapshots = [];
+                }
+
+                // Check if we already have a snapshot from this URL
+                const existingUrls = new Set(rule.snapshots.map(s => s.sourceUrl));
+                if (existingUrls.has(sourceUrl)) {
+                    // Don't add duplicate, just return current state
+                    resolve(rule);
+                    return;
+                }
+
+                // Add the new snapshot
+                rule.snapshots.push({
+                    capturedAt: new Date().toISOString(),
+                    regionHtml,
+                    sourceUrl
+                });
+                rule.updatedAt = new Date().toISOString();
+
+                const putRequest = store.put(rule);
+                putRequest.onsuccess = () => resolve(rule);
+                putRequest.onerror = () => reject(putRequest.error);
+            };
+
+            getRequest.onerror = () => reject(getRequest.error);
+        });
+    }
+
+    /**
+     * Clear snapshots from a rule (after detection completes).
+     */
+    async function clearSnapshots(ruleId, indexedDB) {
+        const database = await initDB(indexedDB);
+        return new Promise((resolve, reject) => {
+            const transaction = database.transaction(['rules'], 'readwrite');
+            const store = transaction.objectStore('rules');
+            const getRequest = store.get(ruleId);
+
+            getRequest.onsuccess = () => {
+                const rule = getRequest.result;
+                if (!rule) {
+                    reject(new Error('Rule not found'));
+                    return;
+                }
+
+                rule.snapshots = [];
+                rule.updatedAt = new Date().toISOString();
+
+                const putRequest = store.put(rule);
+                putRequest.onsuccess = () => resolve(rule);
+                putRequest.onerror = () => reject(putRequest.error);
+            };
+
+            getRequest.onerror = () => reject(getRequest.error);
+        });
+    }
+
+    /**
+     * Transition a rule from learning to resolved state.
+     */
+    /**
+     * Transition a rule from learning to resolved state.
+     */
+    async function resolveRule(ruleId, detectedFields, identifierFieldName, urlPattern, indexedDB) {
+        const database = await initDB(indexedDB);
+        return new Promise((resolve, reject) => {
+            const transaction = database.transaction(['rules'], 'readwrite');
+            const store = transaction.objectStore('rules');
+            const getRequest = store.get(ruleId);
+
+            getRequest.onsuccess = () => {
+                const rule = getRequest.result;
+                if (!rule) {
+                    reject(new Error('Rule not found'));
+                    return;
+                }
+
+                // Update rule with detected fields and crystallized URL pattern
+                rule.state = 'resolved';
+                rule.urlPattern = urlPattern || rule.urlPattern;
+                rule.fields = detectedFields.map(f => ({
+                    name: f.name === identifierFieldName ? 'identifier' : f.name,
+                    selector: f.selector,
+                    required: f.name === identifierFieldName
+                }));
+
+                rule.snapshots = []; // Clear snapshots
+                rule.updatedAt = new Date().toISOString();
+
+                const putRequest = store.put(rule);
+                putRequest.onsuccess = () => resolve(rule);
+                putRequest.onerror = () => reject(putRequest.error);
+            };
+
+            getRequest.onerror = () => reject(getRequest.error);
+        });
+    }
 
     // Export database functions
     globalObj.Lidar.db = {
@@ -315,6 +438,10 @@
         deleteData,
         deleteDataByRule,
         registerMigration,
+        // Learning mode functions
+        addSnapshot,
+        clearSnapshots,
+        resolveRule,
         resetCache: () => { dbCache = null; },
         closeDB: () => { if (dbCache) { dbCache.close(); dbCache = null; } }
     };

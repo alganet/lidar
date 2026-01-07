@@ -9,13 +9,13 @@ describe('Rules Module (rules.js)', () => {
         // Set up global context for browser extension
         global.self = global;
         global.Lidar = global.Lidar || {};
-        
+
         // Load the rules module
         require('../../src/rules.js');
     });
-    
+
     // Removed beforeEach that was causing issues
-    
+
     describe('matchesUrlPattern', () => {
         test.each([
             ['', 'https://example.com', true],
@@ -46,7 +46,7 @@ describe('Rules Module (rules.js)', () => {
             expect(Lidar.rules.matchesUrlPattern(pattern, url)).toBe(expected);
         });
     });
-    
+
     describe('sortRules', () => {
         test('should sort rules by applicability and then by name', () => {
             const rules = [
@@ -55,66 +55,66 @@ describe('Rules Module (rules.js)', () => {
                 { id: 3, name: 'M Rule', isApplicable: true },
                 { id: 4, name: 'B Rule', isApplicable: false }
             ];
-            
+
             const sorted = Lidar.rules.sortRules(rules);
-            
+
             expect(sorted).toHaveLength(4);
             expect(sorted[0].name).toBe('A Rule'); // Applicable, first alphabetically
             expect(sorted[1].name).toBe('M Rule'); // Applicable, second alphabetically
             expect(sorted[2].name).toBe('B Rule'); // Not applicable, first alphabetically
             expect(sorted[3].name).toBe('Z Rule'); // Not applicable, second alphabetically
         });
-        
+
         test('should handle rules with only applicability difference', () => {
             const rules = [
                 { id: 1, name: 'Rule A', isApplicable: false },
                 { id: 2, name: 'Rule B', isApplicable: true }
             ];
-            
+
             const sorted = Lidar.rules.sortRules(rules);
-            
+
             expect(sorted[0].name).toBe('Rule B'); // Applicable comes first
             expect(sorted[1].name).toBe('Rule A'); // Not applicable comes second
         });
-        
+
         test('should handle rules with only name difference', () => {
             const rules = [
                 { id: 1, name: 'Z Rule', isApplicable: true },
                 { id: 2, name: 'A Rule', isApplicable: true }
             ];
-            
+
             const sorted = Lidar.rules.sortRules(rules);
-            
+
             expect(sorted[0].name).toBe('A Rule');
             expect(sorted[1].name).toBe('Z Rule');
         });
-        
+
         test('should not mutate original array', () => {
             const originalRules = [
                 { id: 1, name: 'B Rule', isApplicable: true },
                 { id: 2, name: 'A Rule', isApplicable: true }
             ];
-            
+
             const originalOrder = [...originalRules];
             Lidar.rules.sortRules(originalRules);
-            
+
             expect(originalRules).toEqual(originalOrder); // Original should be unchanged
         });
-        
+
         test('should handle empty array', () => {
             const sorted = Lidar.rules.sortRules([]);
             expect(sorted).toEqual([]);
         });
-        
+
         test('should handle single rule', () => {
             const rules = [{ id: 1, name: 'Only Rule', isApplicable: true }];
             const sorted = Lidar.rules.sortRules(rules);
-            
+
             expect(sorted).toHaveLength(1);
             expect(sorted[0]).toEqual(rules[0]);
         });
     });
-    
+
     describe('sortData', () => {
         test('should sort data by scrapedAt in descending order', () => {
             const data = [
@@ -122,15 +122,15 @@ describe('Rules Module (rules.js)', () => {
                 { id: 2, scrapedAt: '2025-01-01T12:00:00.000Z' },
                 { id: 3, scrapedAt: '2025-01-01T08:00:00.000Z' }
             ];
-            
+
             const sorted = Lidar.rules.sortData(data);
-            
+
             expect(sorted).toHaveLength(3);
             expect(sorted[0].scrapedAt).toBe('2025-01-01T12:00:00.000Z'); // Latest first
             expect(sorted[1].scrapedAt).toBe('2025-01-01T10:00:00.000Z');
             expect(sorted[2].scrapedAt).toBe('2025-01-01T08:00:00.000Z'); // Earliest last
         });
-        
+
         test('should handle missing scrapedAt values', () => {
             const data = [
                 { id: 1, scrapedAt: '2025-01-01T10:00:00.000Z' },
@@ -138,40 +138,40 @@ describe('Rules Module (rules.js)', () => {
                 { id: 3, scrapedAt: '2025-01-01T08:00:00.000Z' },
                 { id: 4 } // undefined scrapedAt
             ];
-            
+
             const sorted = Lidar.rules.sortData(data);
-            
+
             expect(sorted[0].scrapedAt).toBe('2025-01-01T10:00:00.000Z');
             // The items with null/undefined scrapedAt should come last
             expect(sorted[sorted.length - 1].scrapedAt).toBeUndefined();
         });
-        
+
         test('should not mutate original array', () => {
             const originalData = [
                 { id: 1, scrapedAt: '2025-01-01T10:00:00.000Z' },
                 { id: 2, scrapedAt: '2025-01-01T08:00:00.000Z' }
             ];
-            
+
             const originalOrder = [...originalData];
             Lidar.rules.sortData(originalData);
-            
+
             expect(originalData).toEqual(originalOrder);
         });
-        
+
         test('should handle empty array', () => {
             const sorted = Lidar.rules.sortData([]);
             expect(sorted).toEqual([]);
         });
-        
+
         test('should handle single item', () => {
             const data = [{ id: 1, scrapedAt: '2025-01-01T10:00:00.000Z' }];
             const sorted = Lidar.rules.sortData(data);
-            
+
             expect(sorted).toHaveLength(1);
             expect(sorted[0]).toEqual(data[0]);
         });
     });
-    
+
     describe('getApplyKey', () => {
         test.each([
             [{ id: 'rule-123' }, 'item-456', 'rule-123:item-456'],
@@ -186,20 +186,37 @@ describe('Rules Module (rules.js)', () => {
             expect(Lidar.rules.getApplyKey(rule, identifier)).toBe(expected);
         });
     });
-    
+
+    describe('crystallizeUrlPattern', () => {
+        test.each([
+            [[], ''],
+            [['https://example.com/user/1'], 'https://example.com/user/1'],
+            [['https://example.com/user/1', 'https://example.com/user/2'], 'https://example.com/user/*'],
+            [['https://example.com/p/a', 'https://example.com/p/b', 'https://example.com/p/c'], 'https://example.com/p/*'],
+            [['https://news.ycombinator.com/user?id=a', 'https://news.ycombinator.com/user?id=b'], 'https://news.ycombinator.com/user?id=*'],
+            [['https://news.ycombinator.com/item?id=1', 'https://news.ycombinator.com/item?id=2'], 'https://news.ycombinator.com/item?id=*'],
+            [['https://example.com/a/b/c', 'https://example.com/a/b/d'], 'https://example.com/a/b/*'],
+            [['https://example.com/test', 'https://other.com/test'], '*']
+        ])('crystallizeUrlPattern(%j) should return %s', (urls, expected) => {
+            expect(Lidar.rules.crystallizeUrlPattern(urls)).toBe(expected);
+        });
+    });
+
     describe('Module exports', () => {
         test('should export all expected functions', () => {
             expect(Lidar.rules).toHaveProperty('matchesUrlPattern');
             expect(Lidar.rules).toHaveProperty('sortRules');
             expect(Lidar.rules).toHaveProperty('sortData');
             expect(Lidar.rules).toHaveProperty('getApplyKey');
+            expect(Lidar.rules).toHaveProperty('crystallizeUrlPattern');
         });
-        
+
         test('should export functions as callable', () => {
             expect(typeof Lidar.rules.matchesUrlPattern).toBe('function');
             expect(typeof Lidar.rules.sortRules).toBe('function');
             expect(typeof Lidar.rules.sortData).toBe('function');
             expect(typeof Lidar.rules.getApplyKey).toBe('function');
+            expect(typeof Lidar.rules.crystallizeUrlPattern).toBe('function');
         });
     });
 });

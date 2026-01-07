@@ -22,6 +22,22 @@
   let highlightOverlay = null;
   let currentBrowseRule = null;
   let currentBrowseData = [];
+  // Simple editor state
+  let isRegionPickerActive = false;
+  let selectedRegionSelector = null;
+  let selectedRegionHtml = null;
+  let regionHighlightOverlay = null;
+
+  // Configuration: Tag names considered as region containers for the region picker.
+  // Extracted to a module-level constant for clarity and reuse.
+  const REGION_CONTAINER_TAGS = ['TABLE', 'DIV', 'SECTION', 'ARTICLE', 'UL', 'OL', 'DL', 'MAIN', 'ASIDE'];
+
+  // Confirmation messages used in the UI (extracted for easier modification/testing)
+  const CONFIRM_MESSAGES = {
+    clearData: 'Are you sure you want to clear all data for this rule?\nThis implies starting the list anew.',
+    deleteRule: 'Delete this rule?',
+    resolveRule: 'Are you sure you want to resolve this rule with the detected fields? This will also convert captured snapshots into permanent records.'
+  };
 
   // Create the panel container
   const panelHost = document.createElement('div');
@@ -88,13 +104,30 @@
   const statusBar = shadow.getElementById('statusBar');
   const exportBtn = shadow.getElementById('exportBtn');
   const clearDataBtn = shadow.getElementById('clearDataBtn');
+  const previewView = shadow.getElementById('previewView');
+  const previewFields = shadow.getElementById('previewFields');
+  const previewUrlValue = shadow.getElementById('previewUrlValue');
+  const refreshPreviewBtn = shadow.getElementById('refreshPreviewBtn');
+  const confirmAcceptBtn = shadow.getElementById('confirmAcceptBtn');
 
   // Templates
   const templateRuleCard = shadow.getElementById('template-rule-card');
+  const templateLearningCard = shadow.getElementById('template-learning-card');
   const templateEmptyRules = shadow.getElementById('template-empty-rules');
   const templateFieldItem = shadow.getElementById('template-field-item');
   const templateDataCard = shadow.getElementById('template-data-card');
   const templateDataField = shadow.getElementById('template-data-field');
+  const templatePreviewField = shadow.getElementById('template-preview-field');
+
+  // Simple Editor elements
+  const simpleEditorView = shadow.getElementById('simpleEditorView');
+  const simpleRuleName = shadow.getElementById('simpleRuleName');
+  const simpleUrlPattern = shadow.getElementById('simpleUrlPattern');
+  const regionStatus = shadow.getElementById('regionStatus');
+  const selectRegionBtn = shadow.getElementById('selectRegionBtn');
+  const simpleCancelBtn = shadow.getElementById('simpleCancelBtn');
+  const showAdvancedBtn = shadow.getElementById('showAdvancedBtn');
+  const simpleSaveBtn = shadow.getElementById('simpleSaveBtn');
 
   // Make panel draggable
   let isDragging = false;
@@ -135,12 +168,15 @@
     listView.classList.toggle('active', view === 'list');
     editorView.classList.toggle('active', view === 'editor');
     browseView.classList.toggle('active', view === 'browse');
+    simpleEditorView.classList.toggle('active', view === 'simpleEditor');
+    previewView.classList.toggle('active', view === 'preview');
     backBtn.style.display = view === 'list' ? 'none' : 'flex';
 
     if (view === 'list') {
       loadRules();
       editingRuleId = null;
       stopPicker();
+      stopRegionPicker();
     }
   }
 
@@ -194,34 +230,47 @@
     }
 
     rules.forEach(rule => {
-      const clone = templateRuleCard.content.cloneNode(true);
+      // Check if rule is in learning state
+      const isLearning = rule.state === 'learning';
+      const template = isLearning ? templateLearningCard : templateRuleCard;
+      const clone = template.content.cloneNode(true);
       const card = clone.querySelector('.rule-card');
 
-      if (rule.isApplicable) card.classList.add('applicable');
+      if (!isLearning && rule.isApplicable) card.classList.add('applicable');
       card.dataset.id = rule.id;
-
-      // Removed checkIcon logic as we don't track applied status here anymore
 
       clone.querySelector('.rule-name').textContent = rule.name;
 
-      const metaText = `${rule.fields.length} field${rule.fields.length !== 1 ? 's' : ''}${rule.isApplicable ? ' • matches this page' : ''}`;
-      clone.querySelector('.rule-meta').textContent = metaText;
+      if (isLearning) {
+        // Setup actions
+        const previewBtn = clone.querySelector('.preview-rule-btn');
 
-      // Setup actions
-      clone.querySelector('.browse-btn').dataset.id = rule.id;
-      clone.querySelector('.browse-btn').addEventListener('click', async () => {
-        const r = await Lidar.messaging.sendMessage({ action: 'getRule', id: rule.id }, chrome.runtime);
-        if (!r.error) showBrowse(r);
-      });
+        previewBtn.dataset.id = rule.id;
+        previewBtn.addEventListener('click', () => handlePreview(rule.id));
 
-      clone.querySelector('.edit-btn').dataset.id = rule.id;
-      clone.querySelector('.edit-btn').addEventListener('click', async () => {
-        const r = await Lidar.messaging.sendMessage({ action: 'getRule', id: rule.id }, chrome.runtime);
-        if (!r.error) showEditor(r);
-      });
+        clone.querySelector('.delete-btn').dataset.id = rule.id;
+        clone.querySelector('.delete-btn').addEventListener('click', () => deleteRule(rule.id));
+      } else {
+        // Resolved card: normal display
+        const metaText = `${rule.fields?.length || 0} field${rule.fields?.length !== 1 ? 's' : ''}${rule.isApplicable ? ' • matches this page' : ''}`;
+        clone.querySelector('.rule-meta').textContent = metaText;
 
-      clone.querySelector('.delete-btn').dataset.id = rule.id;
-      clone.querySelector('.delete-btn').addEventListener('click', () => deleteRule(rule.id));
+        // Setup actions
+        clone.querySelector('.browse-btn').dataset.id = rule.id;
+        clone.querySelector('.browse-btn').addEventListener('click', async () => {
+          const r = await Lidar.messaging.sendMessage({ action: 'getRule', id: rule.id }, chrome.runtime);
+          if (!r.error) showBrowse(r);
+        });
+
+        clone.querySelector('.edit-btn').dataset.id = rule.id;
+        clone.querySelector('.edit-btn').addEventListener('click', async () => {
+          const r = await Lidar.messaging.sendMessage({ action: 'getRule', id: rule.id }, chrome.runtime);
+          if (!r.error) showEditor(r);
+        });
+
+        clone.querySelector('.delete-btn').dataset.id = rule.id;
+        clone.querySelector('.delete-btn').addEventListener('click', () => deleteRule(rule.id));
+      }
 
       rulesList.appendChild(clone);
     });
@@ -282,7 +331,189 @@
     fieldsList.appendChild(clone);
   }
 
-  createNewBtn.addEventListener('click', () => showEditor());
+  // Simple Editor
+  function showSimpleEditor() {
+    simpleRuleName.value = '';
+    simpleUrlPattern.value = `${window.location.origin}/*`;
+    selectedRegionSelector = null;
+    selectedRegionHtml = null;
+    updateRegionStatus();
+    showView('simpleEditor');
+  }
+
+  function updateRegionStatus() {
+    if (selectedRegionSelector) {
+      regionStatus.classList.add('has-region');
+      regionStatus.innerHTML = `<span class="region-selector-display">${selectedRegionSelector}</span>`;
+    } else {
+      regionStatus.classList.remove('has-region');
+      regionStatus.innerHTML = '<span class="region-status-text">No region selected</span>';
+    }
+  }
+
+  // Region Picker
+  function createRegionHighlightOverlay() {
+    if (regionHighlightOverlay) return;
+
+    regionHighlightOverlay = document.createElement('div');
+    regionHighlightOverlay.className = 'region-highlight-overlay';
+    regionHighlightOverlay.style.cssText = `
+      position: fixed;
+      pointer-events: none;
+      background: rgba(251, 191, 36, 0.2);
+      border: 2px dashed #fbbf24;
+      border-radius: 4px;
+      z-index: 2147483645;
+      transition: all 0.1s ease;
+      display: none;
+    `;
+    document.body.appendChild(regionHighlightOverlay);
+  }
+
+  let regionPickerTarget = null;
+
+  function handleRegionPickerMove(e) {
+    if (!isRegionPickerActive) return;
+
+    const target = e.target;
+    if (target === regionHighlightOverlay || target === panelHost || panelHost.contains(target)) return;
+
+    // Prefer container elements
+    let selectedTarget = target;
+    if (!REGION_CONTAINER_TAGS.includes(target.tagName)) {
+      // Look for a nearby container parent
+      let parent = target.parentElement;
+      for (let i = 0; i < 3 && parent; i++) {
+        if (REGION_CONTAINER_TAGS.includes(parent.tagName)) {
+          selectedTarget = parent;
+          break;
+        }
+        parent = parent.parentElement;
+      }
+    }
+
+    regionPickerTarget = selectedTarget;
+    const rect = selectedTarget.getBoundingClientRect();
+
+    regionHighlightOverlay.style.display = 'block';
+    regionHighlightOverlay.style.top = `${rect.top}px`;
+    regionHighlightOverlay.style.left = `${rect.left}px`;
+    regionHighlightOverlay.style.width = `${rect.width}px`;
+    regionHighlightOverlay.style.height = `${rect.height}px`;
+  }
+
+  function handleRegionPickerClick(e) {
+    if (!isRegionPickerActive) return;
+    if (e.target === panelHost || panelHost.contains(e.target)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (regionPickerTarget) {
+      selectedRegionSelector = Lidar.scraping.generateSelector(regionPickerTarget);
+      selectedRegionHtml = regionPickerTarget.outerHTML;
+      updateRegionStatus();
+      showStatus('Region selected!', 'success');
+      stopRegionPicker();
+    }
+  }
+
+  function handleRegionPickerKey(e) {
+    if (e.key === 'Escape' && isRegionPickerActive) {
+      stopRegionPicker();
+      showStatus('Region picker cancelled', 'warning');
+    }
+  }
+
+  function startRegionPicker() {
+    if (isRegionPickerActive) stopRegionPicker();
+
+    isRegionPickerActive = true;
+    createRegionHighlightOverlay();
+
+    document.addEventListener('mousemove', handleRegionPickerMove, true);
+    document.addEventListener('click', handleRegionPickerClick, true);
+    document.addEventListener('keydown', handleRegionPickerKey, true);
+
+    document.body.style.cursor = 'crosshair';
+    selectRegionBtn.classList.add('active');
+    selectRegionBtn.innerHTML = `<svg width="12" height="12"><use href="#icon-picking"/></svg> Selecting...`;
+
+    showStatus('Click on the data region. Press Escape to cancel.', 'warning');
+  }
+
+  function stopRegionPicker() {
+    isRegionPickerActive = false;
+
+    if (regionHighlightOverlay) {
+      regionHighlightOverlay.style.display = 'none';
+    }
+
+    document.removeEventListener('mousemove', handleRegionPickerMove, true);
+    document.removeEventListener('click', handleRegionPickerClick, true);
+    document.removeEventListener('keydown', handleRegionPickerKey, true);
+
+    document.body.style.cursor = '';
+
+    if (selectRegionBtn) {
+      selectRegionBtn.classList.remove('active');
+      selectRegionBtn.innerHTML = `<svg width="12" height="12"><use href="#icon-cursor"/></svg> Select Region`;
+    }
+
+    regionPickerTarget = null;
+  }
+
+  // Simple editor event handlers
+  createNewBtn.addEventListener('click', () => showSimpleEditor());
+  selectRegionBtn.addEventListener('click', () => startRegionPicker());
+  simpleCancelBtn.addEventListener('click', () => showView('list'));
+
+  showAdvancedBtn.addEventListener('click', () => {
+    // Transfer values to advanced editor
+    ruleName.value = simpleRuleName.value;
+    urlPattern.value = simpleUrlPattern.value;
+    showEditor();
+  });
+
+  simpleSaveBtn.addEventListener('click', async () => {
+    const name = simpleRuleName.value.trim();
+    if (!name) {
+      showStatus('Please enter a rule name', 'error');
+      return;
+    }
+
+    if (!selectedRegionSelector) {
+      showStatus('Please select a data region', 'error');
+      return;
+    }
+
+    const urlPatternValue = simpleUrlPattern.value.trim();
+    if (!urlPatternValue) {
+      showStatus('URL pattern is required', 'error');
+      return;
+    }
+
+    try {
+      const rule = {
+        name,
+        urlPattern: urlPatternValue,
+        state: 'learning',
+        regionSelector: selectedRegionSelector,
+        fields: [],
+        snapshots: selectedRegionHtml ? [{
+          capturedAt: new Date().toISOString(),
+          regionHtml: selectedRegionHtml,
+          sourceUrl: window.location.href
+        }] : []
+      };
+      await Lidar.messaging.sendMessage({ action: 'createRule', rule }, chrome.runtime);
+      showStatus('Rule created! Visit pages to collect snapshots for field detection.', 'success');
+      setTimeout(() => showView('list'), 1000);
+    } catch (error) {
+      showStatus(`Error: ${error.message}`, 'error');
+    }
+  });
+
   addFieldBtn.addEventListener('click', () => addField());
   cancelBtn.addEventListener('click', () => showView('list'));
 
@@ -414,7 +645,7 @@
 
   clearDataBtn.addEventListener('click', async () => {
     if (!currentBrowseRule) return;
-    if (!confirm('Are you sure you want to clear all data for this rule?\nThis implies starting the list anew.')) return;
+    if (!confirm(CONFIRM_MESSAGES.clearData)) return;
 
     try {
       await Lidar.messaging.sendMessage({ action: 'deleteDataByRule', ruleId: currentBrowseRule.id }, chrome.runtime);
@@ -427,7 +658,7 @@
 
   // Delete rule
   async function deleteRule(id) {
-    if (!confirm('Delete this rule?')) return;
+    if (!confirm(CONFIRM_MESSAGES.deleteRule)) return;
     try {
       await Lidar.messaging.sendMessage({ action: 'deleteRule', id }, chrome.runtime);
       showStatus('Rule deleted', 'success');
@@ -585,5 +816,128 @@
     }
     return true;
   });
+
+  async function handlePreview(ruleId) {
+    showView('preview');
+    runPreviewAnalysis(ruleId);
+  }
+
+  async function runPreviewAnalysis(ruleId) {
+    confirmAcceptBtn.style.display = 'none';
+    refreshPreviewBtn.disabled = true;
+    refreshPreviewBtn.textContent = 'Analyzing...';
+    previewFields.innerHTML = '<div class="loading-spinner">Analyzing snapshots...</div>';
+    previewUrlValue.textContent = '...';
+
+    try {
+      const rule = await Lidar.messaging.sendMessage({ action: 'getRule', id: ruleId }, chrome.runtime);
+      const snapshots = rule.snapshots || [];
+
+      if (snapshots.length < 2) {
+        previewFields.innerHTML = `
+          <div class="empty-state">
+            <svg width="40" height="40" style="opacity: 0.5;"><use href="#icon-box" /></svg>
+            <p>Not enough data for analysis yet.</p>
+            <p style="font-size: 11px; margin-top: 8px;">Please visit more similar pages to capture at least 2 consistent snapshots.</p>
+          </div>
+        `;
+        refreshPreviewBtn.textContent = 'Refresh Analysis';
+        refreshPreviewBtn.disabled = false;
+        refreshPreviewBtn.onclick = () => runPreviewAnalysis(ruleId);
+        return;
+      }
+
+      const result = Lidar.fieldDetection.detectFieldsFromSnapshots(snapshots);
+
+      if (result.error) {
+        previewFields.innerHTML = `<div class="error-state">${result.error}</div>`;
+        refreshPreviewBtn.textContent = 'Retry Analysis';
+        refreshPreviewBtn.disabled = false;
+        refreshPreviewBtn.onclick = () => runPreviewAnalysis(ruleId);
+        return;
+      }
+
+      // Render fields
+      previewFields.innerHTML = '';
+      result.fields.forEach(field => {
+        const fieldClone = templatePreviewField.content.cloneNode(true);
+        fieldClone.querySelector('.preview-field-name').textContent = field.name;
+        fieldClone.querySelector('.preview-field-values').textContent = field.sampleValues.join(', ');
+        previewFields.appendChild(fieldClone);
+      });
+
+      previewUrlValue.textContent = result.urlPattern;
+
+      // Setup actions
+      confirmAcceptBtn.style.display = 'block';
+      confirmAcceptBtn.onclick = () => handleAccept(ruleId, result);
+
+      refreshPreviewBtn.textContent = 'Refresh Analysis';
+      refreshPreviewBtn.disabled = false;
+      refreshPreviewBtn.onclick = () => runPreviewAnalysis(ruleId);
+
+      showStatus('Fields detected successfully!', 'success');
+    } catch (error) {
+      previewFields.innerHTML = `<div class="error-state">Error: ${error.message}</div>`;
+      refreshPreviewBtn.textContent = 'Retry Analysis';
+      refreshPreviewBtn.disabled = false;
+      refreshPreviewBtn.onclick = () => runPreviewAnalysis(ruleId);
+    }
+  }
+
+  async function handleAccept(ruleId, result) {
+    if (!confirm(CONFIRM_MESSAGES.resolveRule)) return;
+
+    confirmAcceptBtn.disabled = true;
+    confirmAcceptBtn.textContent = 'Resolving...';
+
+    try {
+      // 1. Fetch the rule to get snapshots
+      const rule = await Lidar.messaging.sendMessage({ action: 'getRule', id: ruleId }, chrome.runtime);
+      if (rule.error) throw new Error(rule.error);
+
+      // 2. Convert existing snapshots to permanent records
+      if (rule.snapshots && rule.snapshots.length > 0) {
+        showStatus(`Converting ${rule.snapshots.length} snapshots...`, 'warning');
+
+        // Prepare normalized fields for extraction
+        const extractionFields = result.fields.map(f => ({
+          name: f.name === result.identifier ? 'identifier' : f.name,
+          selector: f.selector
+        }));
+
+        for (const snapshot of rule.snapshots) {
+          const doc = new DOMParser().parseFromString(snapshot.regionHtml, 'text/html');
+          const region = doc.body.firstElementChild || doc.body;
+
+          const scrapedData = Lidar.scraping.extractData({ fields: extractionFields }, region);
+
+          await Lidar.messaging.sendMessage({
+            action: 'saveData',
+            ruleId: rule.id,
+            ruleName: rule.name,
+            data: scrapedData,
+            sourceUrl: snapshot.sourceUrl
+          }, chrome.runtime);
+        }
+      }
+
+      // 3. Resolve the rule
+      await Lidar.messaging.sendMessage({
+        action: 'resolveRule',
+        ruleId,
+        fields: result.fields,
+        identifier: result.identifier,
+        urlPattern: result.urlPattern
+      }, chrome.runtime);
+
+      showStatus('Rule resolved and data converted!', 'success');
+      showView('list');
+    } catch (error) {
+      showStatus(`Error resolving rule: ${error.message}`, 'error');
+      confirmAcceptBtn.disabled = false;
+      confirmAcceptBtn.textContent = 'Accept & Resolve Rule';
+    }
+  }
 
 })();

@@ -37,8 +37,42 @@ SPDX-License-Identifier: ISC
                 Create New Rule
             </button>
         </div>
+        <!-- Simple Editor View (default for new rules) -->
+        <div class="view" id="simpleEditorView">
+            <div class="form-group">
+                <label>Rule Name <span class="field-badge">required</span></label>
+                <input type="text" id="simpleRuleName" placeholder="e.g., Person, Product, Article">
+            </div>
 
-        <!-- Editor View -->
+            <div class="form-group">
+                <label>URL Pattern <span class="field-badge">required</span></label>
+                <input type="text" id="simpleUrlPattern" placeholder="e.g., https://example.com/*">
+                <div class="field-hint">Use * as wildcard. Matches pages where this rule applies.</div>
+            </div>
+
+            <div class="region-section">
+                <div class="region-header">Data Region</div>
+                <div class="region-status" id="regionStatus">
+                    <span class="region-status-text">No region selected</span>
+                </div>
+                <button class="btn btn-pick btn-full" id="selectRegionBtn">
+                    <svg width="12" height="12">
+                        <use href="#icon-cursor" />
+                    </svg>
+                    Select Region
+                </button>
+                <div class="field-hint">Click on the page to select the region containing the data you want to scrape.
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button class="btn btn-ghost" id="simpleCancelBtn">Cancel</button>
+                <button class="btn btn-secondary" id="showAdvancedBtn">Show Advanced</button>
+                <button class="btn btn-primary" id="simpleSaveBtn">Create Rule</button>
+            </div>
+        </div>
+
+        <!-- Editor View (advanced mode) -->
         <div class="view" id="editorView">
             <div class="form-group">
                 <label>Rule Name <span class="field-badge">required</span></label>
@@ -98,6 +132,22 @@ SPDX-License-Identifier: ISC
                 <p>No data yet. Apply this rule to a page to start collecting.</p>
             </div>
         </div>
+
+        <!-- Preview View -->
+        <div class="view" id="previewView">
+            <div class="browse-header">
+                <h3 id="previewTitle">Analysis Preview</h3>
+            </div>
+            <div class="preview-results-container">
+                <div class="preview-fields" id="previewFields"></div>
+                <div class="preview-url-pattern">Pattern: <span class="preview-url-value" id="previewUrlValue"></span>
+                </div>
+            </div>
+            <div class="form-actions" style="margin-top: 16px; flex-direction: column; gap: 8px;">
+                <button class="btn btn-secondary btn-full" id="refreshPreviewBtn">Refresh Analysis</button>
+                <button class="btn btn-primary btn-full" id="confirmAcceptBtn">Accept & Resolve Rule</button>
+            </div>
+        </div>
     </div>
 
     <div class="status-bar hidden" id="statusBar"></div>
@@ -140,6 +190,39 @@ SPDX-License-Identifier: ISC
             <use href="#icon-box" />
         </svg>
         <p>No rules yet. Create your first rule to start scraping.</p>
+    </div>
+</template>
+
+<template id="template-learning-card">
+    <div class="rule-card learning">
+        <div class="rule-info">
+            <div class="rule-name-row">
+                <span class="rule-name"></span>
+                <span class="learning-badge">Learning...</span>
+            </div>
+        </div>
+        <div class="rule-actions">
+            <button class="btn btn-secondary btn-sm preview-rule-btn" title="Preview detected fields">
+                <svg width="12" height="12">
+                    <use href="#icon-browse" />
+                </svg>
+                Preview
+            </button>
+            <button class="btn btn-danger btn-sm delete-btn" title="Delete rule">
+                <svg width="12" height="12">
+                    <use href="#icon-trash" />
+                </svg>
+            </button>
+        </div>
+    </div>
+</template>
+
+<template id="template-preview-field">
+    <div class="preview-field">
+        <div class="preview-field-header">
+            <span class="preview-field-name"></span>
+        </div>
+        <div class="preview-field-values"></div>
     </div>
 </template>
 
