@@ -69,8 +69,11 @@ const { createMockCrypto } = require('./mocks/testHelpers');
 // Mock crypto for encryption operations
 global.crypto = createMockCrypto();
 
-// Setup Lidar global object
-global.Lidar = {
+// Ensure centralized global helper is loaded for tests
+require('../src/global.js');
+
+// Setup Lidar global object (global.js may have already initialized this)
+global.Lidar = global.Lidar || {
   messaging: {},
   db: {},
   rules: {},
@@ -86,8 +89,16 @@ if (typeof structuredClone === 'undefined') {
   };
 }
 
+// Polyfill CSS.escape
+if (typeof CSS === 'undefined') {
+  global.CSS = {
+    escape: (str) => str.replace(/([!"#$%&'()*+,-.\/:;<=>?@[\]^`{|}~])/g, '\\$1')
+  };
+}
+
 // Mock DOM APIs for jsdom environment
 if (typeof window !== 'undefined') {
+  window.CSS = global.CSS;
   window.chrome = global.chrome;
   window.Lidar = global.Lidar;
   window.structuredClone = global.structuredClone;

@@ -8,8 +8,11 @@
 (function () {
     'use strict';
 
-    // Initialize Lidar namespace
-    self.Lidar = self.Lidar || {};
+    const globalObj = (typeof globalThis.__getLidarGlobal === 'function')
+        ? globalThis.__getLidarGlobal()
+        : ((typeof Lidar !== 'undefined' && typeof Lidar._getGlobal === 'function')
+            ? Lidar._getGlobal()
+            : (function () { throw new Error('Global accessor not initialized. Ensure src/global.js is loaded before this module.'); }()));
 
     // Update badge with count
     function updateBadge(count, tabId, chromeApi) {
@@ -38,7 +41,7 @@
     }
 
     // Export badge functions
-    self.Lidar.badge = {
+    globalObj.Lidar.badge = {
         updateBadge,
         clearBadge
     };
