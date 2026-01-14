@@ -897,8 +897,8 @@
       if (rule.error) throw new Error(rule.error);
 
       // 2. Convert existing snapshots to permanent records
-      if (rule.snapshots && rule.snapshots.length > 0) {
-        showStatus(`Converting ${rule.snapshots.length} snapshots...`, 'warning');
+      if (rule.snapshots && rule.snapshots.length > 0 && result.subsetIndices) {
+        showStatus(`Converting ${result.subsetIndices.length} snapshots...`, 'warning');
 
         // Prepare normalized fields for extraction
         const extractionFields = result.fields.map(f => ({
@@ -906,7 +906,10 @@
           selector: f.selector
         }));
 
-        for (const snapshot of rule.snapshots) {
+        for (const index of result.subsetIndices) {
+          const snapshot = rule.snapshots[index];
+          if (!snapshot) continue;
+
           const doc = new DOMParser().parseFromString(snapshot.regionHtml, 'text/html');
           const region = doc.body.firstElementChild || doc.body;
 

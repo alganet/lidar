@@ -20,7 +20,7 @@
 
     // Minimum number of snapshots required for subset-based comparisons (e.g., diffs).
     // Many heuristics require at least a pair of snapshots to detect changes.
-    const MIN_SUBSET_SNAPSHOTS = 2; 
+    const MIN_SUBSET_SNAPSHOTS = 2;
 
     // Default CSS class names to ignore when deriving a name from element classes.
     // Exposed as a module-level constant so it can be adjusted in one place or replaced in tests.
@@ -497,25 +497,41 @@
 
         let fallbackCounter = 1;
         const fields = varyingElements.map(el => {
-            let name = inferFieldName(el.element, context);
-            if (!name) name = `field_${fallbackCounter++}`;
-            return { name, selector: el.selector, sampleValues: el.values };
+            const name = inferFieldName(el.element, context);
+            if (name) {
+                return { name, selector: el.selector, sampleValues: el.values, isFallback: false };
+            }
+            return {
+                name: `field_${fallbackCounter++}`,
+                selector: el.selector,
+                sampleValues: el.values,
+                isFallback: true
+            };
         });
 
-        // Deduplicate
+        // Deduplicate: merge named fields, suffix unnamed ones
         const nameCount = {};
+        const finalFields = [];
         for (const field of fields) {
             if (nameCount[field.name]) {
-                nameCount[field.name]++;
-                field.name = `${field.name}_${nameCount[field.name]}`;
+                if (field.isFallback) {
+                    nameCount[field.name]++;
+                    field.name = `${field.name}_${nameCount[field.name]}`;
+                    finalFields.push(field);
+                }
+                // Skip subsequent named fields with the same name:
+                // only the first occurrence is kept (its selector and sampleValues),
+                // later duplicates are discarded to avoid names like "about" and "about_2".
             } else {
                 nameCount[field.name] = 1;
+                finalFields.push(field);
             }
         }
 
         return {
-            fields,
-            identifier: detectBestIdentifier(fields, subsetSnapshots),
+            fields: finalFields,
+            identifier: detectBestIdentifier(finalFields, subsetSnapshots),
+            subsetIndices: bestSubset,
             urlPattern: Lidar.rules.crystallizeUrlPattern(subsetSnapshots.map(s => s.sourceUrl))
         };
     }
