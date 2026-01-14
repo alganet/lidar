@@ -303,6 +303,70 @@ describe('Field Detection Module (fieldDetection.js)', () => {
             expect(userField.sampleValues).toContain('alice123');
         });
 
+        test('should merge named fields and suffix unnamed fields', () => {
+            const snapshot1 = {
+                regionHtml: '<div><span class="about">Info 1</span><div class="bio">Bio 1</div><p>Other 1</p><p>Extra 1</p></div>',
+                sourceUrl: 'http://a.com/user1'
+            };
+            const snapshot2 = {
+                regionHtml: '<div><span class="about">Info 2</span><div class="bio">Bio 2</div><p>Other 2</p><p>Extra 2</p></div>',
+                sourceUrl: 'http://a.com/user2'
+            };
+
+            // Mock inferFieldName to produce clashing names
+            // 1st element -> "about"
+            // 2nd element -> "about" (should merge)
+            // 3rd element -> null -> "field_1"
+            // 4th element -> null -> "field_2" (should suffix)
+            const originalInfer = Lidar.fieldDetection.inferFieldName;
+            let callCount = 0;
+            Lidar.fieldDetection.inferFieldName = jest.fn(() => {
+                callCount++;
+                if (callCount === 1) return 'about';
+                if (callCount === 2) return 'about';
+                return null;
+            });
+
+            try {
+                const result = Lidar.fieldDetection.detectFieldsFromSnapshots([snapshot1, snapshot2]);
+                const names = result.fields.map(f => f.name);
+
+                // Should have "about", and some field_N ones, but NOT about_2
+                expect(names).toContain('about');
+                expect(names).not.toContain('about_2');
+
+                // Verify "about" appears exactly once
+                const aboutCount = names.filter(n => n === 'about').length;
+                expect(aboutCount).toBe(1);
+            } finally {
+                Lidar.fieldDetection.inferFieldName = originalInfer;
+            }
+        });
+
+        test('should treat semantic names starting with "field_" as named fields', () => {
+            const snapshot1 = {
+                regionHtml: '<div><span class="field_one">A1</span><span class="field_one">A2</span></div>',
+                sourceUrl: 'http://a.com'
+            };
+            const snapshot2 = {
+                regionHtml: '<div><span class="field_one">B1</span><span class="field_one">B2</span></div>',
+                sourceUrl: 'http://b.com'
+            };
+
+            const originalInfer = Lidar.fieldDetection.inferFieldName;
+            Lidar.fieldDetection.inferFieldName = jest.fn().mockReturnValue('field_one');
+
+            try {
+                const result = Lidar.fieldDetection.detectFieldsFromSnapshots([snapshot1, snapshot2]);
+                const names = result.fields.map(f => f.name);
+
+                // Should merge "field_one" instead of suffixing it as "field_one_2"
+                expect(names).toEqual(['field_one']);
+            } finally {
+                Lidar.fieldDetection.inferFieldName = originalInfer;
+            }
+        });
+
         test('should identify unique field as identifier', () => {
             const snapshot1 = {
                 regionHtml: '<div><span class="id">ID001</span><span class="status">Active</span></div>',
@@ -355,6 +419,13 @@ describe('Field Detection Module (fieldDetection.js)', () => {
             ]);
             expect(result.fields).toEqual([]);
             expect(result.urlPattern).toBe('*');
+        });
+
+        test('should return subsetIndices', () => {
+            const snapshot1 = { regionHtml: '<div>A</div>', sourceUrl: 'http://a.com' };
+            const snapshot2 = { regionHtml: '<div>B</div>', sourceUrl: 'http://b.com' };
+            const result = Lidar.fieldDetection.detectFieldsFromSnapshots([snapshot1, snapshot2]);
+            expect(result.subsetIndices).toEqual([0, 1]);
         });
     });
 

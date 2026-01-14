@@ -54,6 +54,9 @@ describe('Consistency-Aware Field Detection', () => {
 
         // URL Pattern should crystallize around the profile subset
         expect(result.urlPattern).toBe('https://news.ycombinator.com/user?id=*');
+
+        // Verify subsetIndices only contains the Profile snapshots (0, 1, 2, 3)
+        expect(result.subsetIndices.sort()).toEqual([0, 1, 2, 3]);
     });
 
     test('should handle completely inconsistent snapshots by falling back to all', () => {
