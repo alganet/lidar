@@ -123,6 +123,7 @@
   const simpleEditorView = shadow.getElementById('simpleEditorView');
   const simpleRuleName = shadow.getElementById('simpleRuleName');
   const simpleUrlPattern = shadow.getElementById('simpleUrlPattern');
+  const simpleUrlPatternGroup = shadow.getElementById('simpleUrlPatternGroup');
   const regionStatus = shadow.getElementById('regionStatus');
   const selectRegionBtn = shadow.getElementById('selectRegionBtn');
   const simpleCancelBtn = shadow.getElementById('simpleCancelBtn');
@@ -335,6 +336,8 @@
   function showSimpleEditor() {
     simpleRuleName.value = '';
     simpleUrlPattern.value = `${window.location.origin}/*`;
+    simpleUrlPatternGroup.style.display = 'none';
+    showAdvancedBtn.textContent = 'Show Advanced';
     selectedRegionSelector = null;
     selectedRegionHtml = null;
     updateRegionStatus();
@@ -469,10 +472,15 @@
   simpleCancelBtn.addEventListener('click', () => showView('list'));
 
   showAdvancedBtn.addEventListener('click', () => {
-    // Transfer values to advanced editor
-    ruleName.value = simpleRuleName.value;
-    urlPattern.value = simpleUrlPattern.value;
-    showEditor();
+    if (simpleUrlPatternGroup.style.display === 'none') {
+      simpleUrlPatternGroup.style.display = 'block';
+      showAdvancedBtn.textContent = 'Advanced Editor';
+    } else {
+      // Transfer values to advanced editor
+      ruleName.value = simpleRuleName.value;
+      urlPattern.value = simpleUrlPattern.value;
+      showEditor();
+    }
   });
 
   simpleSaveBtn.addEventListener('click', async () => {
