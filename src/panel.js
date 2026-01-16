@@ -6,6 +6,12 @@
 // Floating UI panel injected into web pages with Shadow DOM isolation
 
 (async function () {
+  const globalObj = (typeof globalThis.__getLidarGlobal === 'function')
+    ? globalThis.__getLidarGlobal()
+    : ((typeof Lidar !== 'undefined' && typeof Lidar._getGlobal === 'function')
+      ? Lidar._getGlobal()
+      : { Lidar: {} });
+
   // If already injected, toggle visibility instead
   if (window.__lidarPanelInjected) {
     if (window.__lidarTogglePanel) {
@@ -13,6 +19,7 @@
     }
     return;
   }
+
   window.__lidarPanelInjected = true;
 
   // State
@@ -37,6 +44,34 @@
     clearData: 'Are you sure you want to clear all data for this rule?\nThis implies starting the list anew.',
     deleteRule: 'Delete this rule?',
     resolveRule: 'Are you sure you want to resolve this rule with the detected fields? This will also convert captured snapshots into permanent records.'
+  };
+
+  function formatDate(isoString) {
+    const date = new Date(isoString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function getFieldId(isIdentifier) {
+    return isIdentifier ? 'identifier' : `field_${Date.now()}`;
+  }
+
+  function sanitizeFilename(name) {
+    return `${name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_data.json`;
+  }
+
+  function getRuleMetaText(rule) {
+    const fields = rule.fields || [];
+    return `${fields.length} field${fields.length !== 1 ? 's' : ''}${rule.isApplicable ? ' • matches this page' : ''}`;
+  }
+
+  // Expose utilities for testing
+  globalObj.Lidar.panel = {
+    REGION_CONTAINER_TAGS,
+    CONFIRM_MESSAGES,
+    formatDate,
+    getFieldId,
+    sanitizeFilename,
+    getRuleMetaText
   };
 
   // Create the panel container
@@ -81,54 +116,56 @@
   }
 
   // Get elements from shadow DOM
-  const panel = shadow.getElementById('lidarPanel');
-  const panelHeader = shadow.getElementById('panelHeader');
-  const backBtn = shadow.getElementById('backBtn');
+  const panel = shadow.querySelector('#lidarPanel');
+  const panelHeader = shadow.querySelector('#panelHeader');
+  const backBtn = shadow.querySelector('#backBtn');
 
-  const closeBtn = shadow.getElementById('closeBtn');
-  const listView = shadow.getElementById('listView');
-  const editorView = shadow.getElementById('editorView');
-  const browseView = shadow.getElementById('browseView');
-  const rulesList = shadow.getElementById('rulesList');
-  const createNewBtn = shadow.getElementById('createNewBtn');
-  const ruleName = shadow.getElementById('ruleName');
-  const urlPattern = shadow.getElementById('urlPattern');
-  const fieldsList = shadow.getElementById('fieldsList');
-  const addFieldBtn = shadow.getElementById('addFieldBtn');
-  const cancelBtn = shadow.getElementById('cancelBtn');
-  const saveBtn = shadow.getElementById('saveBtn');
-  const browseTitle = shadow.getElementById('browseTitle');
-  const browseCount = shadow.getElementById('browseCount');
-  const dataList = shadow.getElementById('dataList');
-  const emptyState = shadow.getElementById('emptyState');
-  const statusBar = shadow.getElementById('statusBar');
-  const exportBtn = shadow.getElementById('exportBtn');
-  const clearDataBtn = shadow.getElementById('clearDataBtn');
-  const previewView = shadow.getElementById('previewView');
-  const previewFields = shadow.getElementById('previewFields');
-  const previewUrlValue = shadow.getElementById('previewUrlValue');
-  const refreshPreviewBtn = shadow.getElementById('refreshPreviewBtn');
-  const confirmAcceptBtn = shadow.getElementById('confirmAcceptBtn');
+  const closeBtn = shadow.querySelector('#closeBtn');
+  const listView = shadow.querySelector('#listView');
+  const editorView = shadow.querySelector('#editorView');
+  const browseView = shadow.querySelector('#browseView');
+  const rulesList = shadow.querySelector('#rulesList');
+  const createNewBtn = shadow.querySelector('#createNewBtn');
+  const ruleName = shadow.querySelector('#ruleName');
+  const urlPattern = shadow.querySelector('#urlPattern');
+  const fieldsList = shadow.querySelector('#fieldsList');
+  const addFieldBtn = shadow.querySelector('#addFieldBtn');
+  const cancelBtn = shadow.querySelector('#cancelBtn');
+  const saveBtn = shadow.querySelector('#saveBtn');
+  const browseTitle = shadow.querySelector('#browseTitle');
+  const browseCount = shadow.querySelector('#browseCount');
+  const dataList = shadow.querySelector('#dataList');
+  const emptyState = shadow.querySelector('#emptyState');
+  const statusBar = shadow.querySelector('#statusBar');
+  const exportBtn = shadow.querySelector('#exportBtn');
+  const clearDataBtn = shadow.querySelector('#clearDataBtn');
+  const previewView = shadow.querySelector('#previewView');
+  const previewFields = shadow.querySelector('#previewFields');
+  const previewUrlValue = shadow.querySelector('#previewUrlValue');
+  const refreshPreviewBtn = shadow.querySelector('#refreshPreviewBtn');
+  const confirmAcceptBtn = shadow.querySelector('#confirmAcceptBtn');
 
   // Templates
-  const templateRuleCard = shadow.getElementById('template-rule-card');
-  const templateLearningCard = shadow.getElementById('template-learning-card');
-  const templateEmptyRules = shadow.getElementById('template-empty-rules');
-  const templateFieldItem = shadow.getElementById('template-field-item');
-  const templateDataCard = shadow.getElementById('template-data-card');
-  const templateDataField = shadow.getElementById('template-data-field');
-  const templatePreviewField = shadow.getElementById('template-preview-field');
+  const templateRuleCard = shadow.querySelector('#template-rule-card');
+  const templateLearningCard = shadow.querySelector('#template-learning-card');
+  const templateEmptyRules = shadow.querySelector('#template-empty-rules');
+  const templateFieldItem = shadow.querySelector('#template-field-item');
+  const templateDataCard = shadow.querySelector('#template-data-card');
+  const templateDataField = shadow.querySelector('#template-data-field');
+  const templatePreviewField = shadow.querySelector('#template-preview-field');
 
   // Simple Editor elements
-  const simpleEditorView = shadow.getElementById('simpleEditorView');
-  const simpleRuleName = shadow.getElementById('simpleRuleName');
-  const simpleUrlPattern = shadow.getElementById('simpleUrlPattern');
-  const simpleUrlPatternGroup = shadow.getElementById('simpleUrlPatternGroup');
-  const regionStatus = shadow.getElementById('regionStatus');
-  const selectRegionBtn = shadow.getElementById('selectRegionBtn');
-  const simpleCancelBtn = shadow.getElementById('simpleCancelBtn');
-  const showAdvancedBtn = shadow.getElementById('showAdvancedBtn');
-  const simpleSaveBtn = shadow.getElementById('simpleSaveBtn');
+  const simpleEditorView = shadow.querySelector('#simpleEditorView');
+  const simpleRuleName = shadow.querySelector('#simpleRuleName');
+  const simpleUrlPattern = shadow.querySelector('#simpleUrlPattern');
+  const simpleUrlPatternGroup = shadow.querySelector('#simpleUrlPatternGroup');
+  const regionStatus = shadow.querySelector('#regionStatus');
+  const selectRegionBtn = shadow.querySelector('#selectRegionBtn');
+  const simpleCancelBtn = shadow.querySelector('#simpleCancelBtn');
+  const showAdvancedBtn = shadow.querySelector('#showAdvancedBtn');
+  const simpleSaveBtn = shadow.querySelector('#simpleSaveBtn');
+
+  if (window.__lidarTestEnv) return;
 
   // Make panel draggable
   let isDragging = false;
@@ -185,7 +222,7 @@
   async function loadRules() {
     try {
       const rules = await Lidar.messaging.sendMessage({ action: 'getRules' }, chrome.runtime);
-      if (rules.error) throw new Error(rules.error);
+      if (!rules || rules.error) throw new Error(rules ? rules.error : 'Failed to fetch rules');
 
       // Check applicability only (for UI)
       const rulesWithStatus = await Promise.all(rules.map(async (rule) => {
@@ -253,7 +290,7 @@
         clone.querySelector('.delete-btn').addEventListener('click', () => deleteRule(rule.id));
       } else {
         // Resolved card: normal display
-        const metaText = `${rule.fields?.length || 0} field${rule.fields?.length !== 1 ? 's' : ''}${rule.isApplicable ? ' • matches this page' : ''}`;
+        const metaText = getRuleMetaText(rule);
         clone.querySelector('.rule-meta').textContent = metaText;
 
         // Setup actions
@@ -302,7 +339,7 @@
   }
 
   function addField(name = '', selector = '', isIdentifier = false) {
-    const fieldId = isIdentifier ? 'identifier' : `field_${Date.now()}`;
+    const fieldId = getFieldId(isIdentifier);
     const clone = templateFieldItem.content.cloneNode(true);
     const item = clone.querySelector('.field-item');
     item.dataset.field = fieldId;
@@ -580,7 +617,7 @@
 
     try {
       const data = await Lidar.messaging.sendMessage({ action: 'getDataByRule', ruleId: rule.id }, chrome.runtime);
-      if (data.error) throw new Error(data.error);
+      if (!data || data.error) throw new Error(data ? data.error : 'Failed to fetch data');
 
       // Sort by date descending
       const sortedData = Lidar.rules.sortData(data);
@@ -644,7 +681,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${currentBrowseRule.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_data.json`;
+    a.download = sanitizeFilename(currentBrowseRule.name);
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -800,10 +837,6 @@
     statusBar.className = `status-bar ${type}`;
   }
 
-  function formatDate(isoString) {
-    const date = new Date(isoString);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
 
   // Toggle panel visibility (called from popup)
   window.__lidarTogglePanel = function () {

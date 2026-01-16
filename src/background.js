@@ -14,7 +14,7 @@ try {
 }
 
 // Message Handler
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+function messageHandler(message, sender, sendResponse) {
     const handleAsync = async () => {
         try {
             switch (message.action) {
@@ -112,7 +112,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     handleAsync().then(sendResponse);
     return true; // Keep message channel open for async response
-});
+}
+
+chrome.runtime.onMessage.addListener(messageHandler);
 
 // Initialize DB on install
 chrome.runtime.onInstalled.addListener(() => {
@@ -181,4 +183,9 @@ function broadcastRulesUpdated() {
             }
         });
     });
+}
+
+// Export messageHandler for testing
+if (typeof window !== 'undefined') {
+    window.__lidarBackgroundMessageHandler = messageHandler;
 }

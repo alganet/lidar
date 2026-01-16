@@ -24,7 +24,7 @@
 
         try {
             const rules = await Lidar.messaging.sendMessage({ action: 'getRules' }, chrome.runtime);
-            if (rules.error || !Array.isArray(rules)) {
+            if (!rules || rules.error || !Array.isArray(rules)) {
                 isProcessing = false;
                 return;
             }
